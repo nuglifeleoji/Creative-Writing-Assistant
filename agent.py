@@ -82,7 +82,7 @@ available_functions = [
         "type": "function",
         "function": {
             "name": "get_characters",
-            "description": "使用local_search获取故事中的所有人物角色",
+            "description": "获取故事中的所有人物角色信息。这是分析故事的基础，必须先调用此函数了解人物。",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -127,7 +127,7 @@ available_functions = [
         "type": "function",
         "function": {
             "name": "background_knowledge",
-            "description": "使用global_search获取故事的背景知识",
+            "description": "获取故事的背景知识和主要情节。这是理解故事核心内容的关键函数，必须调用。",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -176,7 +176,7 @@ def chat_with_agent(user_query: str):
     messages = [
         {
             "role": "system",
-            "content": "你是一个图数据分析助手。你可以使用GraphRAG的local_search和global_search功能来获取故事中的人物信息、关系信息和背景知识。"
+            "content": "你是一个专业的文学分析助手。当用户询问关于故事内容时，你必须首先使用GraphRAG的搜索功能来获取准确的故事信息。\n\n重要：在回答任何关于故事内容的问题之前，你必须先调用相应的搜索函数来获取信息。不要直接回答，必须先搜索！\n\n- 对于人物相关的问题，使用get_characters()或get_relationships()\n- 对于背景和情节问题，使用background_knowledge()\n- 对于地点和场景问题，使用get_important_locations()\n- 对于其他具体问题，使用local_search_query()或global_search_query()\n\n获取信息后，基于搜索结果进行深入分析，给出详细的续写建议。"
         },
         {
             "role": "user",
@@ -237,9 +237,7 @@ def chat_with_agent(user_query: str):
 # 测试函数
 def test_agent():
     test_queries = [
-        "故事的背景故事是什么？",
-        "列出故事中的主要人物",
-        "分析弗兰肯斯坦和怪物之间的关系"
+        "请续写这本书"
     ]
     
     agent = GraphAnalysisAgent()

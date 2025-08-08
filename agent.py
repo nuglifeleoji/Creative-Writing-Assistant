@@ -72,11 +72,9 @@ class GraphAnalysisAgent:
         return self.run_graphrag_query("global", query)
     
     def local_search_query(self, query: str) -> Dict[str, Any]:
-        """使用local_search进行自定义查询"""
         return self.run_graphrag_query("local", query)
     
     def global_search_query(self, query: str) -> Dict[str, Any]:
-        """使用global_search进行自定义查询"""
         return self.run_graphrag_query("global", query)
 
 available_functions = [
@@ -174,10 +172,7 @@ available_functions = [
 ]
 
 def chat_with_agent(user_query: str):
-    """与Agent进行对话"""
     agent = GraphAnalysisAgent()
-    
-    # 创建消息
     messages = [
         {
             "role": "system",
@@ -190,8 +185,6 @@ def chat_with_agent(user_query: str):
     ]
     
     print("正在调用LLM...")
-    
-    # 调用LLM
     response = client.chat.completions.create(
         model="Qwen/QwQ-32B",
         messages=messages,

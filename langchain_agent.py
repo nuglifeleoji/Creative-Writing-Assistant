@@ -15,17 +15,17 @@ load_dotenv()
 # 优先读取 OPENAI_API_KEY，其次 AZURE_OPENAI_API_KEY，不要把密钥当作环境变量名
 api_key = os.getenv("OPENAI_API_KEY") or os.getenv("AZURE_OPENAI_API_KEY") or ""
 
-from langchain_core.tools import tool
+
+from langchain.agents import tool
 from langchain.agents import create_react_agent, AgentExecutor, create_tool_calling_agent
 from langchain import hub
 from langchain_openai import ChatOpenAI,AzureChatOpenAI
-# --- 第一步：封装 GraphRAG 查询的后端 ---
-# 这部分直接采用了你提供的代码，用于执行 GraphRAG 命令行查询
+from search.global_search import global_search
+from search.local_search import local_search
 class GraphAnalysisAgent:
-    def __init__(self, rag_root: str):
-        # rag_root 保留但不再直接使用；改为调用 agent.py 内的 global_search
-        self.rag_root = rag_root
-
+    def __init__(self):
+        self.global_search = global_search
+        self.local_search = local_search
     async def global_search_async(self, query: str) -> Dict[str, Any]:
         """直接调用 agent.py 中的 global_search（GraphRAG GlobalSearch），返回精简文本。"""
         try:
@@ -40,13 +40,13 @@ class GraphAnalysisAgent:
             return {"method": "global", "query": query, "error": str(e), "success": False}
 
     # 便捷封装：用 global_search 实现预置查询
+        return await self.global_search(query)
+    async def local_search_async(self, query: str) -> Dict[str, Any]:
+        return await self.local_search(query)
     async def get_characters_async(self) -> Dict[str, Any]:
         return await self.global_search_async("列出故事中的所有人物角色")
-
     async def get_relationships_async(self, p1: str, p2: str) -> Dict[str, Any]:
-        # 暂无 local_search，这里先走全局查询
-        return await self.global_search_async(f"分析{p1}和{p2}之间的关系")
-
+        return await self.local_search_async(f"分析{p1}和{p2}之间的关系")
     async def get_important_locations_async(self) -> Dict[str, Any]:
         return await self.global_search_async("分析故事中的重要地点和场景")
 
@@ -130,7 +130,7 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
 async def main() -> None:
     # 初始化你的 GraphAnalysisAgent，传入 GraphRAG 项目的根目录
     # rag_root 参数当前未使用（已改为直接调用 agent.py 的 global_search）
-    graph_agent = GraphAnalysisAgent(rag_root="./tencent")
+    graph_agent = GraphAnalysisAgent()
 
     # 使用这个实例创建 LangChain Agent
     agent_executor = create_graphrag_agent(graph_agent)

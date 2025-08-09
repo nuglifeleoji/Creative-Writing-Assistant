@@ -25,6 +25,7 @@ from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
 from search.global_search import global_search as graphrag_global_search
 from search.local_search import local_search
+from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 import prompt_utils
 import prompt
 class GraphAnalysisAgent:
@@ -71,6 +72,9 @@ class GraphAnalysisAgent:
 
     async def get_character_profile_async(self, character_name: str) -> Dict[str, Any]:
         return await self.global_search_async(f"获取{character_name}的详细信息")
+    
+    async def get_significant_event_async(self, event_name:str) -> Dict[str, Any]:
+        return await self.global_search_async(f"获取事件{event_name}的详细信息")
     
     async def get_main_theme_async(self) -> Dict[str, Any]:
         return await self.global_search_async("分析故事的主题")
@@ -177,7 +181,13 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         """获取特定人物的详细信息。输入参数character_name是人物名称。"""
         result = await graphrag_agent_instance.get_character_profile_async(character_name)
         return json.dumps(result, ensure_ascii=False)
-    @tool 
+    @tool
+    async def get_significant_event_tool(event_name: str) -> str:
+        """获取特定事件的详细信息。输入参数event_name是事件名称。"""
+        result = await graphrag_agent_instance.get_significant_event_async(event_name)
+        return json.dumps(result, ensure_ascii=False)
+
+    @tool
     async def get_main_theme_tool() -> str:
         """获取故事的主题。"""
         result = await graphrag_agent_instance.get_main_theme_async()
@@ -420,6 +430,7 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         get_characters_tool,
         get_relationships_tool,
         get_important_locations_tool,
+        get_significant_event_tool,
         background_knowledge_tool,
         get_worldview_tool,
         local_search_tool,
@@ -451,7 +462,9 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         model_name="gpt-4o",
         azure_endpoint="https://tcamp.openai.azure.com/",
         openai_api_key=api_key,
-        temperature=0.3
+        temperature=0.3,
+        streaming=True,
+        callbacks=[StreamingStdOutCallbackHandler()]
     )
     llm_gen = AzureChatOpenAI(
         openai_api_version="2024-12-01-preview",
@@ -527,10 +540,10 @@ async def main() -> None:
             # 使用异步调用，匹配异步工具
             # response = await agent_executor.ainvoke({"input": user_query, "guidelines": prompt_utils.build_guidelines(), "functions": agent_executor.tools, "requirements": prompt_utils.build_requirements(), "response_format": prompt_utils.build_response_format()})
             response = await agent_executor.ainvoke({"input": user_query, "guidelines": prompt.build_guidelines(), "functions": agent_executor.tools, "requirements": prompt.build_requirements(), "response_format": prompt.build_response_format(), "history": history_text})
-            print("\n--- Agent 回答 ---")
-            print(response.get("output"))
-            print("--------------------\n")
-            history.append({"role": "assistant", "content": response.get("output")})
+            # print("\n--- Agent 回答 ---")
+            # print(response.get("output"))
+            # print("--------------------\n")
+            # history.append({"role": "assistant", "content": response.get("output")})
         except Exception as e:
             print(f"发生错误：{e}")
             break

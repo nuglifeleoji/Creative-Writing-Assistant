@@ -177,99 +177,99 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         q = f"找出以下文本与原著叙述的冲突点（逐条列出冲突、对应原著证据ID/短摘）：{text[:3000]}"
         res = await graphrag_agent_instance.local_search_async(q)
         return json.dumps(res, ensure_ascii=False)
-    @tool
-    async def continue_story_tool(
-        brief: str,
-        persona: str = "保持与原著一致的叙述者口吻与角色对白风格",
-        target_style: str = "紧凑、具象细节、对白推动剧情",
-        words_per_scene: int = 600,
-        max_iters: int = 2
-    ) -> str:
-        """
-        一键续写：大纲->节拍->写作->一致性与冲突检查->必要时修订。返回最终场景文本和校验信息。
-        - brief: 用户的续写意图说明
-        - persona: 人设与口吻约束
-        - target_style: 文风目标
-        """
-        # 1) 取风格护栏与世界规则
-        guard = await graphrag_agent_instance.global_search_async(
-            f"总结{persona}的叙事风格：允许/禁止的句式、常见修辞、视角限制、节奏建议，列表输出。"
-        )
-        world = await graphrag_agent_instance.global_search_async(
-            "总结世界观硬性规则（政治/法律/科技/宗教/魔法/经济），违反的后果，列表输出。"
-        )
+    # @tool
+    # async def continue_story_tool(
+    #     brief: str,
+    #     persona: str = "保持与原著一致的叙述者口吻与角色对白风格",
+    #     target_style: str = "紧凑、具象细节、对白推动剧情",
+    #     words_per_scene: int = 600,
+    #     max_iters: int = 2
+    # ) -> str:
+    #     """
+    #     一键续写：大纲->节拍->写作->一致性与冲突检查->必要时修订。返回最终场景文本和校验信息。
+    #     - brief: 用户的续写意图说明
+    #     - persona: 人设与口吻约束
+    #     - target_style: 文风目标
+    #     """
+    #     # 1) 取风格护栏与世界规则
+    #     guard = await graphrag_agent_instance.global_search_async(
+    #         f"总结{persona}的叙事风格：允许/禁止的句式、常见修辞、视角限制、节奏建议，列表输出。"
+    #     )
+    #     world = await graphrag_agent_instance.global_search_async(
+    #         "总结世界观硬性规则（政治/法律/科技/宗教/魔法/经济），违反的后果，列表输出。"
+    #     )
 
-        # 2) 基于原著生成续写大纲与节拍（用 GraphRAG 保守抽纲）
-        outline = await graphrag_agent_instance.global_search_async(
-            f"基于原著信息，按照三幕式生成续写大纲（每幕3-5要点，标注涉及人物/地点/冲突/目标）；风格：{target_style}；用户意图：{brief}"
-        )
-        beats = await graphrag_agent_instance.global_search_async(
-            f"把以下大纲拆为节拍表（每节拍含：目的、冲突、转折、关键信息、涉及角色、证据需求），用紧凑清单：\n{outline.get('result','')[:2800]}"
-        )
-        # 选第一条节拍写一个场景（需要更多可拆循环）
-        beat_first = "\n".join(beats.get("result","").split("\n")[:10])
+    #     # 2) 基于原著生成续写大纲与节拍（用 GraphRAG 保守抽纲）
+    #     outline = await graphrag_agent_instance.global_search_async(
+    #         f"基于原著信息，按照三幕式生成续写大纲（每幕3-5要点，标注涉及人物/地点/冲突/目标）；风格：{target_style}；用户意图：{brief}"
+    #     )
+    #     beats = await graphrag_agent_instance.global_search_async(
+    #         f"把以下大纲拆为节拍表（每节拍含：目的、冲突、转折、关键信息、涉及角色、证据需求），用紧凑清单：\n{outline.get('result','')[:2800]}"
+    #     )
+    #     # 选第一条节拍写一个场景（需要更多可拆循环）
+    #     beat_first = "\n".join(beats.get("result","").split("\n")[:10])
 
-        # 3) 写场景（用生成型 LLM）
-        sys = SystemMessage(content=(
-            "你是一名严谨的续写作者，必须遵守原著世界规则与角色性格。"
-            "生成文本要可直接发布，避免方向性描述。"
-            f"【风格护栏】{guard.get('result','')}\n【世界规则】{world.get('result','')}"
-        ))
-        user = HumanMessage(content=(
-            f"请写一个完整场景（不超过{words_per_scene}词）。"
-            f"要求：遵守人物口吻与设定、用对白推动剧情、细节具象、避免与原著冲突。\n"
-            f"【节拍】\n{beat_first}\n\n【用户意图】\n{brief}"
-        ))
-        gen = await llm_gen.ainvoke([sys, user])
-        scene = gen.content if hasattr(gen, "content") else str(gen)
+    #     # 3) 写场景（用生成型 LLM）
+    #     sys = SystemMessage(content=(
+    #         "你是一名严谨的续写作者，必须遵守原著世界规则与角色性格。"
+    #         "生成文本要可直接发布，避免方向性描述。"
+    #         f"【风格护栏】{guard.get('result','')}\n【世界规则】{world.get('result','')}"
+    #     ))
+    #     user = HumanMessage(content=(
+    #         f"请写一个完整场景（不超过{words_per_scene}词）。"
+    #         f"要求：遵守人物口吻与设定、用对白推动剧情、细节具象、避免与原著冲突。\n"
+    #         f"【节拍】\n{beat_first}\n\n【用户意图】\n{brief}"
+    #     ))
+    #     gen = await llm_gen.ainvoke([sys, user])
+    #     scene = gen.content if hasattr(gen, "content") else str(gen)
 
-        # 4) 校验 & 可能修订（最多 max_iters 轮）
-        issues = []
-        for _ in range(max_iters+1):
-            # 一致性与冲突检查（用 GraphRAG 做证据对齐）
-            canon = await graphrag_agent_instance.local_search_async(
-                f"评估文本与正史/世界规则一致性（角色OOC/设定违背/历史违背各给要点与依据）：{scene[:3000]}"
-            )
-            contra = await graphrag_agent_instance.local_search_async(
-                f"找出文本与原著叙述的冲突点（逐条列出冲突、对应原著证据ID/短摘）：{scene[:3000]}"
-            )
-            hard_fail = ("违背" in canon.get("result","")) or ("冲突" in contra.get("result",""))
+    #     # 4) 校验 & 可能修订（最多 max_iters 轮）
+    #     issues = []
+    #     for _ in range(max_iters+1):
+    #         # 一致性与冲突检查（用 GraphRAG 做证据对齐）
+    #         canon = await graphrag_agent_instance.local_search_async(
+    #             f"评估文本与正史/世界规则一致性（角色OOC/设定违背/历史违背各给要点与依据）：{scene[:3000]}"
+    #         )
+    #         contra = await graphrag_agent_instance.local_search_async(
+    #             f"找出文本与原著叙述的冲突点（逐条列出冲突、对应原著证据ID/短摘）：{scene[:3000]}"
+    #         )
+    #         hard_fail = ("违背" in canon.get("result","")) or ("冲突" in contra.get("result",""))
 
-            if not hard_fail:
-                # 收集关键断言证据（可选）
-                ev = await graphrag_agent_instance.local_search_async(
-                    "为上述续写中关键设定与角色动机找出最有力的证据片段（列章节/段落ID+短摘），最多5条。"
-                )
-                return json.dumps({
-                    "status": "DONE",
-                    "outline": outline,
-                    "beats": beats,
-                    "final_text": scene,
-                    "evidence": ev,
-                    "issues": issues
-                }, ensure_ascii=False)
+    #         if not hard_fail:
+    #             # 收集关键断言证据（可选）
+    #             ev = await graphrag_agent_instance.local_search_async(
+    #                 "为上述续写中关键设定与角色动机找出最有力的证据片段（列章节/段落ID+短摘），最多5条。"
+    #             )
+    #             return json.dumps({
+    #                 "status": "DONE",
+    #                 "outline": outline,
+    #                 "beats": beats,
+    #                 "final_text": scene,
+    #                 "evidence": ev,
+    #                 "issues": issues
+    #             }, ensure_ascii=False)
 
-            issues.append({"canon": canon.get("result",""), "conflict": contra.get("result","")})
+    #         issues.append({"canon": canon.get("result",""), "conflict": contra.get("result","")})
 
-            # 5) 修订指令（再喂回生成 LLM）
-            sys2 = SystemMessage(content=(
-                "根据评审意见修订文本，务必消除OOC与设定/历史冲突，保留节拍目标与风格护栏。"
-                f"【风格护栏】{guard.get('result','')}\n【评审】{json.dumps(issues[-1], ensure_ascii=False)[:1500]}"
-            ))
-            user2 = HumanMessage(content=(
-                f"请在不超过{words_per_scene}词内重写该场景：\n{scene[:2000]}"
-            ))
-            rev = await llm_gen.ainvoke([sys2, user2])
-            scene = rev.content if hasattr(rev, "content") else str(rev)
+    #         # 5) 修订指令（再喂回生成 LLM）
+    #         sys2 = SystemMessage(content=(
+    #             "根据评审意见修订文本，务必消除OOC与设定/历史冲突，保留节拍目标与风格护栏。"
+    #             f"【风格护栏】{guard.get('result','')}\n【评审】{json.dumps(issues[-1], ensure_ascii=False)[:1500]}"
+    #         ))
+    #         user2 = HumanMessage(content=(
+    #             f"请在不超过{words_per_scene}词内重写该场景：\n{scene[:2000]}"
+    #         ))
+    #         rev = await llm_gen.ainvoke([sys2, user2])
+    #         scene = rev.content if hasattr(rev, "content") else str(rev)
 
-        # 达到迭代上限仍有问题
-        return json.dumps({
-            "status": "BUDGET_EXCEEDED",
-            "outline": outline,
-            "beats": beats,
-            "final_text": scene,
-            "issues": issues
-        }, ensure_ascii=False)
+    #     # 达到迭代上限仍有问题
+    #     return json.dumps({
+    #         "status": "BUDGET_EXCEEDED",
+    #         "outline": outline,
+    #         "beats": beats,
+    #         "final_text": scene,
+    #         "issues": issues
+    #     }, ensure_ascii=False)
     tools = [
         get_characters_tool,
         get_relationships_tool,
@@ -285,7 +285,7 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         style_guardrails_tool,
         canon_alignment_tool,
         contradiction_test_tool,
-        continue_story_tool
+        # continue_story_tool
     ]
 
     # 初始化 LLM

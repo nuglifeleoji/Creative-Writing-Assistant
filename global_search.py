@@ -123,7 +123,7 @@ search_engine = GlobalSearch(
 
 async def global_search(query: str):
     results = await search_engine.search(query)
-    print(results.response)
+    # print(results.response)
     return results
-if __name__ == "__main__":
-    asyncio.run(global_search("概括故事主题"))
+# if __name__ == "__main__":
+#     asyncio.run(global_search("概括故事主题"))

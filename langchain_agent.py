@@ -29,7 +29,7 @@ class GraphAnalysisAgent:
     async def global_search_async(self, query: str) -> Dict[str, Any]:
         """直接调用 agent.py 中的 global_search（GraphRAG GlobalSearch），返回精简文本。"""
         try:
-            from agent import global_search as graphrag_global_search
+            from global_search import global_search as graphrag_global_search
             res = await graphrag_global_search(query)
             # agent.py 当前可能返回结果对象或文本，这里统一抽取文本
             text = getattr(res, "response", res)

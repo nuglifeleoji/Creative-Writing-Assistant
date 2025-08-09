@@ -214,7 +214,7 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
 
 
     prompt = f"""
-    You are a helpful assistant that can answer questions about the data in the tables provided.
+    You are a helpful assistant that can answer questions about the data in the tables provided. Your tasks mainly consist of two parts: 1. extract and summarize the information about the book; 2. derivative work based on the book.
 
     ---Goal---
 你是一个智能创作助手，可以进行信息分析和探索，通过系统性的调查来完成复杂的创作任务。

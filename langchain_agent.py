@@ -53,6 +53,8 @@ class GraphAnalysisAgent:
     async def get_main_theme_async(self) -> Dict[str, Any]:
         return await self.global_search_async("分析故事的主题")
 
+    async def get_open_questions_async(self) -> Dict[str, Any]:
+        return await self.global_search_async("本书有什么悬念或者没有解决的伏笔？")
 # --- 第二步：创建 LangChain Agent ---
 def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentExecutor:
     """
@@ -105,7 +107,11 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         """获取故事的主题。"""
         result = await graphrag_agent_instance.get_main_theme_async()
         return json.dumps(result, ensure_ascii=False)
-    
+    @tool 
+    async def get_open_questions_tool() -> str:
+        """获取本书的悬念或者未解决的伏笔。"""
+        result = await graphrag_agent_instance.get_open_questions_async()
+        return json.dumps(result, ensure_ascii=False)
     # 将所有工具放入一个列表中
     tools = [
         get_characters_tool,
@@ -115,7 +121,8 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         local_search_tool,
         global_search_tool,
         get_character_profile_tool,
-        get_main_theme_tool
+        get_main_theme_tool,
+        get_open_questions_tool
     ]
 
     # 初始化 LLM

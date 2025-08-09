@@ -20,6 +20,7 @@ def build_guidelines() -> str:
 - **background_knowledge（背景报告）**
   - 适配：时代/政治/科技/宗教/文化等宏观设定与其对情节的约束。
   - 输入建议：{dimension=["era","class","tech","ritual"], need_citations=true}
+- **get_open_questions（悬念/伏笔）**
 
 > 选择矩阵：
 - 精确事实 → local_search

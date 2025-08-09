@@ -108,7 +108,7 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
 
     @tool
     async def get_relationships_tool(p1: str, p2: str) -> str:
-        """获取两个特定人物之间的关系（当前用全局查询替代本地查询）。输入参数p1和p2是人物名称。"""
+        """获取两个特定人物之间的关系。输入参数p1和p2是人物名称。如果没有找到两个人物的关系，可以尝试单独查询两个人物的背景信息，并且尝试找到和他们共同相关的人来判断他们之间可能的关系"""
         result = await graphrag_agent_instance.get_relationships_async(p1, p2)
         return json.dumps(result, ensure_ascii=False)
 

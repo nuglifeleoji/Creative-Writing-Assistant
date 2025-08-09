@@ -58,7 +58,7 @@ class GraphAnalysisAgent:
         return await self.global_search_async("列出故事中的所有人物角色")
 
     async def get_relationships_async(self, p1: str, p2: str) -> Dict[str, Any]:
-        return await self.local_search_async(f"分析{p1}和{p2}之间的关系")
+        return await self.global_search_async(f"分析{p1}和{p2}之间的关系")
 
     async def get_important_locations_async(self) -> Dict[str, Any]:
         return await self.global_search_async("分析故事中的重要地点和场景")
@@ -75,7 +75,7 @@ class GraphAnalysisAgent:
     async def get_main_theme_async(self) -> Dict[str, Any]:
         return await self.global_search_async("分析故事的主题")
     async def mock_coversation_async(self, character1_name: str, character2_name: str) -> Dict[str, Any]:
-        return await self.global_search_async(f"模拟{character1_name}和{character2_name}的对话")
+        return await self.local_search_async(f"模拟{character1_name}和{character2_name}的对话")
     async def get_open_questions_async(self) -> Dict[str, Any]:
         return await self.global_search_async("本书有什么悬念或者没有解决的伏笔？")
     async def get_conflict_async(self) -> Dict[str, Any]:
@@ -92,6 +92,8 @@ class GraphAnalysisAgent:
         return await self.local_search_async(f"找出以下文本与原著叙述的冲突点（逐条列出冲突、对应原著证据ID/短摘）：{text[:3000]}")
     async def continue_story_async(self, brief: str, persona: str = "保持与原著一致的叙述者口吻与角色对白风格", target_style: str = "紧凑、具象细节、对白推动剧情", words_per_scene: int = 600, max_iters: int = 2) -> Dict[str, Any]:
         return await self.local_search_async(f"为以下大纲续写一个场景（不超过{words_per_scene}词）：{brief[:3000]}")
+    async def imagine_conversation_async(self, character1_name: str, character2_name: str) -> Dict[str, Any]:
+        return await self.local_search_async(f"想象{character1_name}和{character2_name}的对话")
 
 # --- 第二步：创建 LangChain Agent ---
 def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentExecutor:
@@ -190,6 +192,11 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
     async def get_related_characters_tool(event: str) -> str:
         """获取给定事件的关联人物。"""
         result = await graphrag_agent_instance.get_related_characters_async(event)
+        return json.dumps(result, ensure_ascii=False)
+    @tool
+    async def imagine_conversation_tool(character1_name: str, character2_name: str) -> str:
+        """想象两个角色之间的对话。"""
+        result = await graphrag_agent_instance.imagine_conversation_async(character1_name, character2_name)
         return json.dumps(result, ensure_ascii=False)
     # @tool
     # async def continue_story_tool(
@@ -366,6 +373,7 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         contradiction_test_tool,
         get_conflict_tool,
         get_related_characters_tool,
+        imagine_conversation_tool,
         # continue_story_tool
     ]
 

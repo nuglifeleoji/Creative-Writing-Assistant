@@ -70,9 +70,9 @@ from graphrag.config.models.language_model_config import LanguageModelConfig
 from graphrag.language_model.manager import ModelManager
 from dotenv import load_dotenv
 
-load_dotenv("./app/.env")  # Load environment variables from .env file
-api_key = "cegVziITiNPb7wEZVLSB1GBXr3okwWwreE2h5ijICRTNjMLMGhmkJQQJ99BHACHYHv6XJ3w3AAABACOG3fBh"
-embedding_key = "cegVziITiNPb7wEZVLSB1GBXr3okwWwreE2h5ijICRTNjMLMGhmkJQQJ99BHACHYHv6XJ3w3AAABACOG3fBh"
+load_dotenv("./.env")  # Load environment variables from .env file
+api_key = os.getenv("AZURE_OPENAI_API_KEY")
+embedding_key = os.getenv("Embedding_key")
 llm_model = "gpt-4o"
 embedding_model = "embedding-3"
 
@@ -180,7 +180,7 @@ search_engine = LocalSearch(
 
 async def local_search(query: str):
     results = await search_engine.search(query)
-    # print(results.response)
+    print(results.response)
     return results
 
-# asyncio.run(local_search("Please introduce the character Jessica in the story."))
+asyncio.run(local_search("Please introduce the character Jessica in the story."))

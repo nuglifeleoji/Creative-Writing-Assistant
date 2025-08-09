@@ -41,17 +41,24 @@ class GraphAnalysisAgent:
 
     # 便捷封装：用 global_search 实现预置查询
         return await self.global_search(query)
+
     async def local_search_async(self, query: str) -> Dict[str, Any]:
         return await self.local_search(query)
+
     async def get_characters_async(self) -> Dict[str, Any]:
         return await self.global_search_async("列出故事中的所有人物角色")
+
     async def get_relationships_async(self, p1: str, p2: str) -> Dict[str, Any]:
         return await self.local_search_async(f"分析{p1}和{p2}之间的关系")
+
     async def get_important_locations_async(self) -> Dict[str, Any]:
         return await self.global_search_async("分析故事中的重要地点和场景")
 
     async def background_knowledge_async(self) -> Dict[str, Any]:
         return await self.global_search_async("分析故事的背景知识和主要情节")
+
+    async def get_character_profile_async(self, character_name: str) -> Dict[str, Any]:
+        return await self.global_search_async(f"获取{character_name}的详细信息")
 
 # --- 第二步：创建 LangChain Agent ---
 def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentExecutor:
@@ -95,7 +102,11 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         """使用 GraphRAG 的全局查询功能进行自定义搜索。输入是一个字符串形式的查询。"""
         result = await graphrag_agent_instance.global_search_async(query)
         return json.dumps(result, ensure_ascii=False)
-
+    @tool 
+    async def get_character_profile_tool(character_name: str) -> str:
+        """获取特定人物的详细信息。输入参数character_name是人物名称。"""
+        result = await graphrag_agent_instance.get_character_profile_async(character_name)
+        return json.dumps(result, ensure_ascii=False)
     # 将所有工具放入一个列表中
     tools = [
         get_characters_tool,
@@ -103,7 +114,8 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         get_important_locations_tool,
         background_knowledge_tool,
         local_search_tool,
-        global_search_tool
+        global_search_tool,
+        get_character_profile_tool
     ]
 
     # 初始化 LLM

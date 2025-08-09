@@ -1,3 +1,4 @@
+
 import os
 import json
 import asyncio
@@ -180,8 +181,6 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
 
 # --- 主程序入口 ---
 async def main() -> None:
-    # 初始化你的 GraphAnalysisAgent，传入 GraphRAG 项目的根目录
-    # rag_root 参数当前未使用（已改为直接调用 agent.py 的 global_search）
     graph_agent = GraphAnalysisAgent()
 
     # 使用这个实例创建 LangChain Agent

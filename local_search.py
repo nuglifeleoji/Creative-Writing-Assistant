@@ -71,9 +71,8 @@ from graphrag.language_model.manager import ModelManager
 from dotenv import load_dotenv
 
 load_dotenv("./app/.env")  # Load environment variables from .env file
-
-api_key = os.getenv("API_KEY")
-embedding_key = os.getenv("GLM_API_KEY")
+api_key = "cegVziITiNPb7wEZVLSB1GBXr3okwWwreE2h5ijICRTNjMLMGhmkJQQJ99BHACHYHv6XJ3w3AAABACOG3fBh"
+embedding_key = "cegVziITiNPb7wEZVLSB1GBXr3okwWwreE2h5ijICRTNjMLMGhmkJQQJ99BHACHYHv6XJ3w3AAABACOG3fBh"
 llm_model = "gpt-4o"
 embedding_model = "embedding-3"
 

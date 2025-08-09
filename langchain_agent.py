@@ -65,7 +65,10 @@ class GraphAnalysisAgent:
         return await self.global_search_async("分析故事中的重要地点和场景")
 
     async def background_knowledge_async(self) -> Dict[str, Any]:
-        return await self.global_search_async("分析故事的背景知识和主要情节")
+        return await self.global_search_async("分析故事的背景知识")
+    
+    async def get_worldview_async(self) -> Dict[str, Any]:
+        return await self.global_search_async("获取故事的世界观和基本设定")
 
     async def get_character_profile_async(self, character_name: str) -> Dict[str, Any]:
         return await self.global_search_async(f"获取{character_name}的详细信息")
@@ -122,6 +125,12 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         return json.dumps(result, ensure_ascii=False)
     
     @tool
+    async def get_worldview_tool() -> str:
+        """使用 GraphRAG 的全局查询功能获取故事的世界观和基本设定。"""
+        result = await graphrag_agent_instance.get_worldview_async()
+        return json.dumps(result, ensure_ascii=False)
+
+    @tool
     async def local_search_tool(query: str) -> str:
         """使用 GraphRAG 的局部查询功能进行自定义搜索。输入是一个字符串形式的查询。"""
         result = await graphrag_agent_instance.local_search_async(query)
@@ -177,6 +186,7 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         q = f"找出以下文本与原著叙述的冲突点（逐条列出冲突、对应原著证据ID/短摘）：{text[:3000]}"
         res = await graphrag_agent_instance.local_search_async(q)
         return json.dumps(res, ensure_ascii=False)
+
     # @tool
     # async def continue_story_tool(
     #     brief: str,
@@ -275,6 +285,7 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         get_relationships_tool,
         get_important_locations_tool,
         background_knowledge_tool,
+        get_worldview_tool,
         local_search_tool,
         global_search_tool,
         get_character_profile_tool,
@@ -315,7 +326,7 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
     ---Goal---
 你是一个智能创作助手，可以进行信息分析和探索，通过系统性的调查来完成复杂的创作任务。
 ## 历史对话
-历史对话信息
+{{history}}
 ## 用户问题
 {{input}}
 ## 调查周期 (Investigation Cycle)
@@ -355,18 +366,27 @@ async def main() -> None:
 
     print("LangChain Agent with GraphRAG (Python API) tools is ready. Type 'exit' to quit.")
 
+    history = []
+
     while True:
         user_query = input("\n请输入你的问题：")
+        history.append({"role": "user", "content": user_query})
+        recent_history = history[-4:]  # 只保留最近的5条历史记录
+        history_text = ""
+        for msg in recent_history:
+            prefix = "用户：" if msg["role"] == "user" else "助手："
+            history_text += f"{prefix}{msg['content']}\n"
         if user_query.lower() == 'exit':
             break
 
         try:
             # 使用异步调用，匹配异步工具
             # response = await agent_executor.ainvoke({"input": user_query, "guidelines": prompt_utils.build_guidelines(), "functions": agent_executor.tools, "requirements": prompt_utils.build_requirements(), "response_format": prompt_utils.build_response_format()})
-            response = await agent_executor.ainvoke({"input": user_query, "guidelines": prompt.build_guidelines(), "functions": agent_executor.tools, "requirements": prompt.build_requirements(), "response_format": prompt.build_response_format()})
+            response = await agent_executor.ainvoke({"input": user_query, "guidelines": prompt.build_guidelines(), "functions": agent_executor.tools, "requirements": prompt.build_requirements(), "response_format": prompt.build_response_format(), "history": history_text})
             print("\n--- Agent 回答 ---")
             print(response.get("output"))
             print("--------------------\n")
+            history.append({"role": "assistant", "content": response.get("output")})
         except Exception as e:
             print(f"发生错误：{e}")
             break

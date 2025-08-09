@@ -371,7 +371,7 @@ async def main() -> None:
     while True:
         user_query = input("\n请输入你的问题：")
         history.append({"role": "user", "content": user_query})
-        recent_history = history[-4:]  # 只保留最近的5条历史记录
+        recent_history = history[-4:]  # 只保留最近的4条历史记录
         history_text = ""
         for msg in recent_history:
             prefix = "用户：" if msg["role"] == "user" else "助手："

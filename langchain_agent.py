@@ -30,10 +30,28 @@ class GraphAnalysisAgent:
         self.global_search = graphrag_global_search
         self.local_search = local_search
     async def global_search_async(self, query: str) -> Dict[str, Any]:
+        """直接调用 agent.py 中的 global_search（GraphRAG GlobalSearch），返回精简文本。"""
+        try:
+            res = await graphrag_global_search(query)
+            # agent.py 当前可能返回结果对象或文本，这里统一抽取文本
+            text = getattr(res, "response", res)
+            if not isinstance(text, str):
+                text = str(text)
+            return {"method": "global", "query": query, "result": text, "success": True}
+        except Exception as e:
+            return {"method": "global", "query": query, "error": str(e), "success": False}
         return await self.global_search(query)
 
     async def local_search_async(self, query: str) -> Dict[str, Any]:
-        return await self.local_search(query)
+        try:
+            res = await local_search(query)
+            # agent.py 当前可能返回结果对象或文本，这里统一抽取文本
+            text = getattr(res, "response", res)
+            if not isinstance(text, str):
+                text = str(text)
+            return {"method": "local", "query": query, "result": text, "success": True}
+        except Exception as e:
+            return {"method": "local", "query": query, "error": str(e), "success": False}
 
     async def get_characters_async(self) -> Dict[str, Any]:
         return await self.global_search_async("列出故事中的所有人物角色")
@@ -61,7 +79,12 @@ class GraphAnalysisAgent:
     
     async def get_causal_chains_async(self, event: str) -> Dict[str, Any]:
         return await self.local_search_async(f"获取{event}事件的因果链：前置条件→触发→结果→后果")
-        
+    async def style_guardrails_async(self, persona: str) -> Dict[str, Any]:
+        return await self.global_search_async(f"总结{persona}的叙事风格：允许和禁止的句式、词汇、常见修辞、视角限制、节奏建议，列表输出。")
+    async def canon_alignment_async(self, text: str) -> Dict[str, Any]:
+        return await self.local_search_async(f"评估以下文本与正史/世界规则的一致性（角色OOC、设定违背、历史违背各给要点评价与依据）：{text[:3000]}")
+    async def contradiction_test_async(self, text: str) -> Dict[str, Any]:
+        return await self.local_search_async(f"找出以下文本与原著叙述的冲突点（逐条列出冲突、对应原著证据ID/短摘）：{text[:3000]}")
 
 # --- 第二步：创建 LangChain Agent ---
 def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentExecutor:
@@ -130,7 +153,27 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         """获取给定事件的因果链。"""
         result = await graphrag_agent_instance.get_causal_chains_async(event)
         return json.dumps(result, ensure_ascii=False)
-    # 将所有工具放入一个列表中
+    @tool
+    async def style_guardrails_tool(persona: str) -> str:
+        """产出风格护栏：允许/禁止的句式、词汇、视角、节奏等（供续写遵守）"""
+        q = f"总结{persona}的叙事风格：允许和禁止的句式、词汇、常见修辞、视角限制、节奏建议，列表输出。"
+        res = await graphrag_agent_instance.global_search_async(q)
+        return json.dumps(res, ensure_ascii=False)
+
+    @tool
+    async def canon_alignment_tool(text: str) -> str:
+        """评估文本与正史/世界规则一致性（角色OOC/设定违背/历史违背），给要点与依据"""
+        q = f"评估以下文本与正史/世界规则的一致性（角色OOC、设定违背、历史违背各给要点评价与依据）：{text[:3000]}"
+        res = await graphrag_agent_instance.local_search_async(q)
+        return json.dumps(res, ensure_ascii=False)
+
+    @tool
+    async def contradiction_test_tool(text: str) -> str:
+        """检测文本与原著叙述的冲突点，给出原文证据片段定位"""
+        q = f"找出以下文本与原著叙述的冲突点（逐条列出冲突、对应原著证据ID/短摘）：{text[:3000]}"
+        res = await graphrag_agent_instance.local_search_async(q)
+        return json.dumps(res, ensure_ascii=False)
+
     tools = [
         get_characters_tool,
         get_relationships_tool,
@@ -142,7 +185,10 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         get_main_theme_tool,
         get_open_questions_tool,
         get_conflict_matrix_tool,
-        get_causal_chains_tool
+        get_causal_chains_tool,
+        style_guardrails_tool,
+        canon_alignment_tool,
+        contradiction_test_tool 
     ]
 
     # 初始化 LLM
@@ -154,6 +200,15 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         azure_endpoint="https://tcamp.openai.azure.com/",
         openai_api_key=api_key,
         temperature=0.3
+    )
+    llm_gen = AzureChatOpenAI(
+        openai_api_version="2024-12-01-preview",
+        azure_deployment="gpt-4o",
+        model_name="gpt-4o",
+        azure_endpoint="https://tcamp.openai.azure.com/",
+        openai_api_key=api_key,
+        temperature=0.85,   # 更高创造性
+        max_tokens=1400     # 续写长度预算（按需调）
     )
 
 

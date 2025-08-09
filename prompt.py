@@ -18,6 +18,8 @@ def build_guidelines() -> str:
 - **get_open_questions（悬念/伏笔）**
 - **get_conflict_matrix（冲突矩阵）**
 - **get_causal_chains（因果链）**
+- **get_worldview_tool(世界观)**
+    在进行二次创作任务时应先调用此工具获取书中的世界观信息。
 
 > 选择矩阵：
 - 精确事实 → local_search。如：要求介绍书中的某个人物或某件事。
@@ -31,7 +33,7 @@ def build_guidelines() -> str:
 ## 2) 工具调用
 - 你可以进行多步推理，如果调用一次工具无法满足需求，可以进行多次工具调用。例如：用户问人物A和人物B性格特点的不同，可以先对人物A调用 `get_character_profile`，再对人物B调用，最后结合两次的结果进行综合分析，而不是对A和B这个整体做一次调用。
 - 对于复杂问题，尽量使用多次工具调用并进行信息整合。
-- 在进行二次创作时，你可以先调用工具获取整本书的世界观和基本设定，即推荐先使用一个get_worldview_tool工具，然后再调用工具获取具体情节或角色信息，结合这些信息进行创作。例如：要求完成对人物A的续写，可以先用get_worldview_tool工具得到书中的设定，再用local工具获取A在故事中的行为方式和性格特点等，最后结合这些信息判断
+- 在进行二次创作时，你可以先调用工具获取整本书的世界观和基本设定，即先使用一个get_worldview_tool工具，然后再调用工具获取具体情节或角色信息，结合这些信息进行创作。例如：要求完成对人物A的续写，可以先用get_worldview_tool工具得到书中的设定，再用local工具获取A在故事中的行为方式和性格特点等，最后结合这些信息判断
 A可能会作出怎样的行为。
 - 二次创作可能涉及对原著中没有的情节的假设。例如：要求推断在书中未见过面的A和B两人见面后可能发生的情节，可以调用两次工具得到A和B的信息，推测人物A对于B这样性格特点的人有什么看法。
 
@@ -95,7 +97,7 @@ def build_requirements() -> str:
 
 def build_response_format() -> str:
     return """\
-# 响应格式（严格模板）
+# 响应格式
 
 ## 1) 处理中（IN_PROGRES / NEED_CLARIFICATION）
 ```markdown

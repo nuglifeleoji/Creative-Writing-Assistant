@@ -392,7 +392,6 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
 
     prompt = f"""
     You are a helpful assistant that can answer questions about the data in the tables provided. Your tasks mainly consist of two parts: 1. extract and summarize the information about the book; 2. derivative work based on the book.
-    You are a helpful assistant that can answer questions about the data in the tables provided. Your tasks mainly consist of two parts: 1. extract and summarize the information about the book; 2. derivative work based on the book.
 
     ---Goal---
 你是一个智能创作助手，可以进行信息分析和探索，通过系统性的调查来完成复杂的创作任务。
@@ -442,7 +441,7 @@ async def main() -> None:
     while True:
         user_query = input("\n请输入你的问题：")
         history.append({"role": "user", "content": user_query})
-        recent_history = history[-4:]  # 只保留最近的5条历史记录
+        recent_history = history[-4:]  # 只保留最近的4条历史记录
         history_text = ""
         for msg in recent_history:
             prefix = "用户：" if msg["role"] == "user" else "助手："

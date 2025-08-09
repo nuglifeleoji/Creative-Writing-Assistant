@@ -20,8 +20,8 @@ from langchain.agents import tool
 from langchain.agents import create_react_agent, AgentExecutor, create_tool_calling_agent
 from langchain import hub
 from langchain_openai import ChatOpenAI,AzureChatOpenAI
-from global_search import global_search
-from local_search import local_search
+from search.global_search import global_search
+from search.local_search import local_search
 class GraphAnalysisAgent:
     def __init__(self):
         self.global_search = global_search

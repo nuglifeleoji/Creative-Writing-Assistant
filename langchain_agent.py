@@ -30,18 +30,6 @@ class GraphAnalysisAgent:
         self.global_search = graphrag_global_search
         self.local_search = local_search
     async def global_search_async(self, query: str) -> Dict[str, Any]:
-        """直接调用 agent.py 中的 global_search（GraphRAG GlobalSearch），返回精简文本。"""
-        try:
-            res = await graphrag_global_search(query)
-            # agent.py 当前可能返回结果对象或文本，这里统一抽取文本
-            text = getattr(res, "response", res)
-            if not isinstance(text, str):
-                text = str(text)
-            return {"method": "global", "query": query, "result": text, "success": True}
-        except Exception as e:
-            return {"method": "global", "query": query, "error": str(e), "success": False}
-
-    # 便捷封装：用 global_search 实现预置查询
         return await self.global_search(query)
 
     async def local_search_async(self, query: str) -> Dict[str, Any]:
@@ -64,6 +52,16 @@ class GraphAnalysisAgent:
     
     async def get_main_theme_async(self) -> Dict[str, Any]:
         return await self.global_search_async("分析故事的主题")
+
+    async def get_open_questions_async(self) -> Dict[str, Any]:
+        return await self.global_search_async("本书有什么悬念或者没有解决的伏笔？")
+
+    async def get_conflict_matrix_async(self) -> Dict[str, Any]:
+        return await self.local_search_async("罗列出角色之间或者不同派系之间的冲突")
+    
+    async def get_causal_chains_async(self, event: str) -> Dict[str, Any]:
+        return await self.local_search_async(f"获取{event}事件的因果链：前置条件→触发→结果→后果")
+        
 
 # --- 第二步：创建 LangChain Agent ---
 def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentExecutor:
@@ -117,7 +115,21 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         """获取故事的主题。"""
         result = await graphrag_agent_instance.get_main_theme_async()
         return json.dumps(result, ensure_ascii=False)
-    
+    @tool 
+    async def get_open_questions_tool() -> str:
+        """获取本书的悬念或者未解决的伏笔。"""
+        result = await graphrag_agent_instance.get_open_questions_async()
+        return json.dumps(result, ensure_ascii=False)
+    @tool 
+    async def get_conflict_matrix_tool() -> str:
+        """获取本书的冲突矩阵。"""
+        result = await graphrag_agent_instance.get_conflict_matrix_async()
+        return json.dumps(result, ensure_ascii=False)
+    @tool
+    async def get_causal_chains_tool(event: str) -> str:
+        """获取给定事件的因果链。"""
+        result = await graphrag_agent_instance.get_causal_chains_async(event)
+        return json.dumps(result, ensure_ascii=False)
     # 将所有工具放入一个列表中
     tools = [
         get_characters_tool,
@@ -127,7 +139,10 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         local_search_tool,
         global_search_tool,
         get_character_profile_tool,
-        get_main_theme_tool
+        get_main_theme_tool,
+        get_open_questions_tool,
+        get_conflict_matrix_tool,
+        get_causal_chains_tool
     ]
 
     # 初始化 LLM

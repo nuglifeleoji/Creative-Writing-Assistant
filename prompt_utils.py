@@ -22,6 +22,7 @@ def build_guidelines() -> str:
   - 输入建议：{dimension=["era","class","tech","ritual"], need_citations=true}
 - **get_open_questions（悬念/伏笔）**
 - **get_conflict_matrix（冲突矩阵）**
+- **get_causal_chains（因果链）**
 
 > 选择矩阵：
 - 精确事实 → local_search

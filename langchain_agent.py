@@ -58,6 +58,11 @@ class GraphAnalysisAgent:
 
     async def get_conflict_matrix_async(self) -> Dict[str, Any]:
         return await self.local_search_async("罗列出角色之间或者不同派系之间的冲突")
+    
+    async def get_causal_chains_async(self, event: str) -> Dict[str, Any]:
+        return await self.local_search_async(f"获取{event}事件的因果链：前置条件→触发→结果→后果")
+        
+
 # --- 第二步：创建 LangChain Agent ---
 def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentExecutor:
     """
@@ -120,6 +125,11 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         """获取本书的冲突矩阵。"""
         result = await graphrag_agent_instance.get_conflict_matrix_async()
         return json.dumps(result, ensure_ascii=False)
+    @tool
+    async def get_causal_chains_tool(event: str) -> str:
+        """获取给定事件的因果链。"""
+        result = await graphrag_agent_instance.get_causal_chains_async(event)
+        return json.dumps(result, ensure_ascii=False)
     # 将所有工具放入一个列表中
     tools = [
         get_characters_tool,
@@ -131,7 +141,8 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         get_character_profile_tool,
         get_main_theme_tool,
         get_open_questions_tool,
-        get_conflict_matrix_tool
+        get_conflict_matrix_tool,
+        get_causal_chains_tool
     ]
 
     # 初始化 LLM

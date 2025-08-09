@@ -74,7 +74,8 @@ class GraphAnalysisAgent:
     
     async def get_main_theme_async(self) -> Dict[str, Any]:
         return await self.global_search_async("分析故事的主题")
-    
+    async def mock_coversation_async(self, character1_name: str, character2_name: str) -> Dict[str, Any]:
+        return await self.global_search_async(f"模拟{character1_name}和{character2_name}的对话")
     async def get_open_questions_async(self) -> Dict[str, Any]:
         return await self.global_search_async("本书有什么悬念或者没有解决的伏笔？")
     async def get_conflict_async(self) -> Dict[str, Any]:

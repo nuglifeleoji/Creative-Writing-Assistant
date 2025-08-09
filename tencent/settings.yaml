@@ -3,43 +3,44 @@
 
 ### LLM settings ###
 ## There are a number of settings to tune the threading and token limits for LLM calls - check the docs.
+
 models:
   default_chat_model:
-    type: openai_chat # or azure_openai_chat
-    api_base: "https://api.siliconflow.cn/v1"
-    # api_version: 2024-05-01-preview
+    type: azure_openai_chat # or azure_openai_chat
+    api_base: https://tcamp.openai.azure.com/
+    api_version: "2024-12-01-preview"
     auth_type: api_key # or azure_managed_identity
-    api_key: ${GRAPHRAG_API_KEY} # set this in the generated .env file
+    api_key: cegVziITiNPb7wEZVLSB1GBXr3okwWwreE2h5ijICRTNjMLMGhmkJQQJ99BHACHYHv6XJ3w3AAABACOG3fBh # set this in the generated .env file
     # audience: "https://cognitiveservices.azure.com/.default"
     # organization: <organization_id>
-    model: deepseek-ai/DeepSeek-R1
-    # deployment_name: <azure_model_deployment_name>
-    encoding_model: cl100k_base # explicitly set tokenizer for Qwen model
+    model: gpt-4o-mini
+    deployment_name: gpt-4o-mini
+    encoding_model: cl100k_base # automatically set by tiktoken if left undefined
     model_supports_json: true # recommended if this is available for your model.
-    concurrent_requests: 10 # max number of simultaneous LLM requests allowed
+    concurrent_requests: 25 # max number of simultaneous LLM requests allowed
     async_mode: threaded # or asyncio
     retry_strategy: native
-    max_retries: 5
-    tokens_per_minute:  1000000             # set to null to disable rate limiting
-    requests_per_minute: 100            # set to null to disable rate limiting
+    max_retries: 10
+    tokens_per_minute: 120000              # set to null to disable rate limiting
+    requests_per_minute: 120            # set to null to disable rate limiting
   default_embedding_model:
-    type: openai_embedding # or azure_openai_embedding
-    api_base: "https://api.siliconflow.cn/v1"
-    # api_version: 2024-05-01-preview
+    type: azure_openai_embedding # or azure_openai_embedding
+    api_base: https://tcamp.openai.azure.com
+    api_version: "2023-05-15"
     auth_type: api_key # or azure_managed_identity
-    api_key: "sk-crrrxsgwputbfxhvilcgzafqyrkzevfmcmocyupkbpcivnrh"
+    api_key: cegVziITiNPb7wEZVLSB1GBXr3okwWwreE2h5ijICRTNjMLMGhmkJQQJ99BHACHYHv6XJ3w3AAABACOG3fBh
     # audience: "https://cognitiveservices.azure.com/.default"
     # organization: <organization_id>
-    model: Qwen/Qwen3-Embedding-4B
-    # deployment_name: <azure_model_deployment_name>
-    encoding_model: cl100k_base # explicitly set tokenizer for BGE model
+    model: text-embedding-ada-002
+    deployment_name: text-embedding-ada-002
+    encoding_model: cl100k_base # automatically set by tiktoken if left undefined
     model_supports_json: true # recommended if this is available for your model.
-    concurrent_requests: 10 # max number of simultaneous LLM requests allowed
+    concurrent_requests: 25 # max number of simultaneous LLM requests allowed
     async_mode: threaded # or asyncio
     retry_strategy: native
-    max_retries: 5
-    tokens_per_minute: 1000000              # set to null to disable rate limiting or auto for dynamic
-    requests_per_minute: 100            # set to null to disable rate limiting or auto for dynamic
+    max_retries: 10
+    tokens_per_minute: null              # set to null to disable rate limiting or auto for dynamic
+    requests_per_minute: null            # set to null to disable rate limiting or auto for dynamic
 
 ### Input settings ###
 
@@ -51,7 +52,7 @@ input:
   
 
 chunks:
-  size: 800
+  size: 1200
   overlap: 100
   group_by_columns: [id]
 

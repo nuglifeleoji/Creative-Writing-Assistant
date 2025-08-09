@@ -176,7 +176,7 @@ def chat_with_agent(user_query: str):
     messages = [
         {
             "role": "system",
-            "content": "你是一个专业的文学分析助手。当用户询问关于故事内容时，你必须首先使用GraphRAG的搜索功能来获取准确的故事信息。\n\n重要：在回答任何关于故事内容的问题之前，你必须先调用相应的搜索函数来获取信息。不要直接回答，必须先搜索！\n\n- 对于人物相关的问题，使用get_characters()或get_relationships()\n- 对于背景和情节问题，使用background_knowledge()\n- 对于地点和场景问题，使用get_important_locations()\n- 对于其他具体问题，使用local_search_query()或global_search_query()\n\n获取信息后，基于搜索结果进行深入分析，给出详细的续写建议。"
+            "content": "你是一个专业的文学分析助手。当用户询问关于故事内容时，你必须严格按照以下步骤执行：\n\n⚠️ 强制要求：在回答任何关于故事内容的问题之前，你必须先调用以下函数来获取信息！\n\n1. 首先调用 get_characters() 获取所有人物信息\n2. 然后调用 background_knowledge() 获取故事背景和主要情节\n3. 最后调用 get_important_locations() 获取重要地点信息\n\n只有在获取了这些基础信息后，你才能进行续写分析。\n\n函数调用顺序：\n- get_characters() - 必须首先调用\n- background_knowledge() - 必须其次调用\n- get_important_locations() - 必须最后调用\n- get_relationships(p1, p2) - 可选，用于分析特定人物关系\n- local_search_query(query) - 可选，用于具体查询\n- global_search_query(query) - 可选，用于全局查询\n\n获取信息后，基于搜索结果进行深入分析，给出详细的续写建议。"
         },
         {
             "role": "user",
@@ -197,25 +197,47 @@ def chat_with_agent(user_query: str):
     
     # 如果有函数调用
     if response_message.tool_calls:
+        print(f"\n🔧 检测到 {len(response_message.tool_calls)} 个函数调用:")
+        
         # 执行函数调用
-        for tool_call in response_message.tool_calls:
+        for i, tool_call in enumerate(response_message.tool_calls, 1):
             function_name = tool_call.function.name
             function_args = json.loads(tool_call.function.arguments)
             
+            print(f"\n📞 函数调用 {i}: {function_name}")
+            if function_args:
+                print(f"   参数: {function_args}")
+            
+            # 执行函数
             if function_name == "get_characters":
+                print("   🎭 正在获取人物信息...")
                 result = agent.get_characters()
             elif function_name == "get_relationships":
+                print(f"   🔗 正在分析 {function_args.get('p1', '')} 和 {function_args.get('p2', '')} 的关系...")
                 result = agent.get_relationships(function_args["p1"], function_args["p2"])
             elif function_name == "get_important_locations":
+                print("   🗺️ 正在获取重要地点信息...")
                 result = agent.get_important_locations()
             elif function_name == "background_knowledge":
+                print("   📚 正在获取背景知识...")
                 result = agent.background_knowledge()
             elif function_name == "local_search_query":
+                print(f"   🔍 正在执行local_search查询: {function_args.get('query', '')}")
                 result = agent.local_search_query(function_args["query"])
             elif function_name == "global_search_query":
+                print(f"   🌍 正在执行global_search查询: {function_args.get('query', '')}")
                 result = agent.global_search_query(function_args["query"])
             else:
+                print(f"   ❌ 未知函数: {function_name}")
                 result = {"error": f"未知函数: {function_name}"}
+            
+            # 显示函数执行结果
+            if result.get("success", False):
+                print(f"   ✅ 函数执行成功")
+                if result.get("result"):
+                    print(f"   结果长度: {len(str(result['result']))} 字符")
+            else:
+                print(f"   ❌ 函数执行失败: {result.get('error', '未知错误')}")
             
             # 将结果添加到消息中
             messages.append({
@@ -223,6 +245,8 @@ def chat_with_agent(user_query: str):
                 "tool_call_id": tool_call.id,
                 "content": json.dumps(result, ensure_ascii=False)
             })
+        
+        print(f"\n🤖 所有函数调用完成，正在生成最终回答...")
         
         # 再次调用LLM生成最终回答
         final_response = client.chat.completions.create(
@@ -232,6 +256,8 @@ def chat_with_agent(user_query: str):
         
         return final_response.choices[0].message.content
     else:
+        print("\n⚠️ 警告：LLM没有调用任何函数！")
+        print("这表示LLM可能没有按照要求执行必要的搜索步骤。")
         return response_message.content
 
 # 测试函数

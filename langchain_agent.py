@@ -25,6 +25,7 @@ from langchain.prompts import ChatPromptTemplate
 from search.global_search import global_search as graphrag_global_search
 from search.local_search import local_search
 import prompt_utils
+import prompt
 class GraphAnalysisAgent:
     def __init__(self):
         self.global_search = graphrag_global_search
@@ -265,7 +266,8 @@ async def main() -> None:
 
         try:
             # 使用异步调用，匹配异步工具
-            response = await agent_executor.ainvoke({"input": user_query, "guidelines": prompt_utils.build_guidelines(), "functions": agent_executor.tools, "requirements": prompt_utils.build_requirements(), "response_format": prompt_utils.build_response_format()})
+            # response = await agent_executor.ainvoke({"input": user_query, "guidelines": prompt_utils.build_guidelines(), "functions": agent_executor.tools, "requirements": prompt_utils.build_requirements(), "response_format": prompt_utils.build_response_format()})
+            response = await agent_executor.ainvoke({"input": user_query, "guidelines": prompt.build_guidelines(), "functions": agent_executor.tools, "requirements": prompt.build_requirements(), "response_format": prompt.build_response_format()})
             print("\n--- Agent 回答 ---")
             print(response.get("output"))
             print("--------------------\n")

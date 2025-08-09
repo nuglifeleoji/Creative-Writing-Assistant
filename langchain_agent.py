@@ -94,6 +94,42 @@ class GraphAnalysisAgent:
         return await self.local_search_async(f"为以下大纲续写一个场景（不超过{words_per_scene}词）：{brief[:3000]}")
     async def imagine_conversation_async(self, character1_name: str, character2_name: str) -> Dict[str, Any]:
         return await self.local_search_async(f"想象{character1_name}和{character2_name}的对话")
+    async def get_plot_timeline_async(self, max_events: int = 30) -> Dict[str, Any]:
+        q = f"""
+    请抽取全书关键事件时间线，严格输出JSON数组（最多{max_events}条）：
+    [{{"order":1,"time":"相对/具体时间","event":"…","characters":["…"],"location":"…","evidence":[{{"chapter":"…","quote":"<=40字"}}]}}]
+    要求：仅书内有证据的事件；按发生顺序；不要额外解释。
+    """
+        return await self.global_search_async(q)
+    async def extract_quotes_async(self, name:str, n:int=8) -> Dict[str, Any]:
+        q = f"列出{name}最具代表性的台词{n}条（每条<=40字，附章节/段落编号），严格JSON数组："
+        return await self.local_search_async(q)
+    async def narrative_pov_async(self) -> Dict[str, Any]:
+        q = """
+    分析叙事视角与可靠性：POV类型、切换点、可能偏见/误导的证据。用分点列出，每点附<=40字短摘+章节。
+    """
+        return await self.global_search_async(q)
+    async def get_motifs_symbols_async(self, max_items:int=20) -> Dict[str, Any]:
+        q = f"""
+    抽取意象/母题/象征（最多{max_items}条），严格JSON：
+    [{{"motif":"…","meaning":"…","linked_themes":["…"],"chapters":["…"],"evidence":[{{"chapter":"…","quote":"<=40字"}}]}}]
+    """
+        return await self.local_search_async(q)
+    async def build_story_outline_async(self, brief:str, target_style:str="紧凑具象") -> Dict[str, Any]:
+        q = f"""
+    基于原著约束，为“{brief}”生成三幕式续写大纲（每幕3-5要点），标注涉及人物/地点/冲突/目标。条目式输出。
+    风格：{target_style}。严禁违反既有设定。
+    """
+        return await self.global_search_async(q)
+    async def emotion_curve_async(self, scope:str="全书") -> Dict[str, Any]:
+        q = f"提取{scope}的情感曲线关键转折（喜/怒/哀/惧/惊/厌/信），列出转折点章节与触发事件，各给<=40字短摘。"
+        return await self.global_search_async(q)
+    async def compare_characters_async(self, a:str, b:str) -> Dict[str, Any]:
+        q = f"""
+    比较{a}与{b}，严格JSON：
+    {{"values":["…"],"goals":["…"],"methods":["…"],"red_lines":["…"],"decision_style":"冲动|谨慎|算计","evidence":[{{"chapter":"…","quote":"<=40字"}}]}}
+    """
+        return await self.global_search_async(q)
 
 # --- 第二步：创建 LangChain Agent ---
 def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentExecutor:
@@ -198,6 +234,42 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         """想象两个角色之间的对话。"""
         result = await graphrag_agent_instance.imagine_conversation_async(character1_name, character2_name)
         return json.dumps(result, ensure_ascii=False)
+    @tool
+    async def get_plot_timeline_tool(max_events: int = 30) -> str:
+        """获取本书的关键事件时间线。"""
+        result = await graphrag_agent_instance.get_plot_timeline_async(max_events)
+        return json.dumps(result, ensure_ascii=False)
+    @tool
+    async def extract_quotes_tool(name:str, n:int=8) -> str:
+        """获取特定人物的台词。"""
+        result = await graphrag_agent_instance.extract_quotes_async(name, n)
+        return json.dumps(result, ensure_ascii=False)
+    @tool
+    async def narrative_pov_tool() -> str:
+        """获取本书的叙事视角。"""
+        result = await graphrag_agent_instance.narrative_pov_async()
+        return json.dumps(result, ensure_ascii=False)
+    @tool
+    async def get_motifs_symbols_tool(max_items:int=20) -> str:
+        """获取本书的意象/母题/象征。"""
+        result = await graphrag_agent_instance.get_motifs_symbols_async(max_items)
+        return json.dumps(result, ensure_ascii=False)
+    @tool
+    async def build_story_outline_tool(brief:str, target_style:str="紧凑具象") -> str:
+        """基于原著约束，为“{brief}”生成三幕式续写大纲（每幕3-5要点），标注涉及人物/地点/冲突/目标。条目式输出。风格：{target_style}。严禁违反既有设定。"""
+        result = await graphrag_agent_instance.build_story_outline_async(brief, target_style)
+        return json.dumps(result, ensure_ascii=False)
+    @tool
+    async def emotion_curve_tool(scope:str="全书") -> str:
+        """获取本书的情感曲线。"""
+        result = await graphrag_agent_instance.emotion_curve_async(scope)
+        return json.dumps(result, ensure_ascii=False)
+    @tool
+    async def compare_characters_tool(a:str, b:str) -> str:
+        """比较两个角色。"""
+        result = await graphrag_agent_instance.compare_characters_async(a, b)
+        return json.dumps(result, ensure_ascii=False)
+    
     # @tool
     # async def continue_story_tool(
     #     brief: str,
@@ -374,6 +446,13 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         get_conflict_tool,
         get_related_characters_tool,
         imagine_conversation_tool,
+        get_plot_timeline_tool,
+        extract_quotes_tool,
+        narrative_pov_tool,
+        get_motifs_symbols_tool, 
+        build_story_outline_tool,
+        emotion_curve_tool,
+        compare_characters_tool,
         # continue_story_tool
     ]
 

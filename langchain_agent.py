@@ -58,6 +58,9 @@ class GraphAnalysisAgent:
 
     async def get_character_profile_async(self, character_name: str) -> Dict[str, Any]:
         return await self.global_search_async(f"获取{character_name}的详细信息")
+    
+    async def get_main_theme_async(self) -> Dict[str, Any]:
+        return await self.global_search_async("分析故事的主题")
 
 # --- 第二步：创建 LangChain Agent ---
 def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentExecutor:
@@ -92,8 +95,8 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
     
     @tool
     async def local_search_tool(query: str) -> str:
-        """使用 GraphRAG 的局部查询功能进行自定义搜索（暂未实现，本工具暂时通过全局查询近似替代）。"""
-        result = await graphrag_agent_instance.global_search_async(query)
+        """使用 GraphRAG 的局部查询功能进行自定义搜索。输入是一个字符串形式的查询。"""
+        result = await graphrag_agent_instance.local_search_async(query)
         return json.dumps(result, ensure_ascii=False)
 
     @tool
@@ -106,6 +109,12 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         """获取特定人物的详细信息。输入参数character_name是人物名称。"""
         result = await graphrag_agent_instance.get_character_profile_async(character_name)
         return json.dumps(result, ensure_ascii=False)
+    @tool 
+    async def get_main_theme_tool() -> str:
+        """获取故事的主题。"""
+        result = await graphrag_agent_instance.get_main_theme_async()
+        return json.dumps(result, ensure_ascii=False)
+    
     # 将所有工具放入一个列表中
     tools = [
         get_characters_tool,
@@ -114,7 +123,8 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         background_knowledge_tool,
         local_search_tool,
         global_search_tool,
-        get_character_profile_tool
+        get_character_profile_tool,
+        get_main_theme_tool
     ]
 
     # 初始化 LLM
@@ -128,8 +138,36 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         temperature=0.3
     )
 
-    # 从 LangChain Hub 获取 ReAct 提示模板
-    prompt = hub.pull("hwchase17/openai-tools-agent")
+
+    prompt = """
+    You are a helpful assistant that can answer questions about the data in the tables provided.
+
+    ---Data tables---
+
+    {context_data}
+
+    ---Goal---
+你是一个智能创作助手，可以进行信息分析和探索，通过系统性的调查来完成复杂的创作任务。
+## 历史对话
+{{ history }}
+## 用户问题
+{{ user_query }}
+## 调查周期 (Investigation Cycle)
+你按照一个持续的周期运作：
+1. 从多个维度理解用户诉求，拆解用户问题，明确用户意图
+2. 根据历史对话，整合有用信息以理解任务目标
+3. 根据已掌握的线索和信息缺口，避免和历史对话中完全相同的工具调用（工具参数一致），选择优先级最高的工具，决定接下来要调用哪个工具
+4. 当你认为没完成任务时或现有信息无法回答用户问题时，"status_update" 为 "IN_PROGRES"，此时你必须选择一个工具。
+5. 当你认为历史对话的信息足够你回答用户问题时，"status_update" 为 "DONE"
+## 可用工具 (Available Tools)
+{{ functions }}
+## 工具使用准则 (Tool Usage Guidelines)
+{{ guidelines }}
+## 注意事项
+{{ requirements }}
+响应格式 (Response Format)
+{{ response_format }}
+    """
 
     # 创建 Agent
     agent = create_tool_calling_agent(llm=llm, tools=tools, prompt=prompt)

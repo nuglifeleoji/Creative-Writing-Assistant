@@ -180,7 +180,7 @@ search_engine = LocalSearch(
 
 async def local_search(query: str):
     results = await search_engine.search(query)
-    print(results.response)
+    # print(results.response)
     return results
 
-asyncio.run(local_search("Please introduce the character Jessica in the story."))
+# asyncio.run(local_search("Please introduce the character Jessica in the story."))

@@ -64,7 +64,10 @@ class GraphAnalysisAgent:
         return await self.global_search_async("分析故事中的重要地点和场景")
 
     async def background_knowledge_async(self) -> Dict[str, Any]:
-        return await self.global_search_async("分析故事的背景知识和主要情节")
+        return await self.global_search_async("分析故事的背景知识")
+    
+    async def get_worldview_async(self) -> Dict[str, Any]:
+        return await self.global_search_async("获取故事的世界观和基本设定")
 
     async def get_character_profile_async(self, character_name: str) -> Dict[str, Any]:
         return await self.global_search_async(f"获取{character_name}的详细信息")
@@ -120,6 +123,12 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         result = await graphrag_agent_instance.background_knowledge_async()
         return json.dumps(result, ensure_ascii=False)
     
+    @tool
+    async def get_worldview_tool() -> str:
+        """使用 GraphRAG 的全局查询功能获取故事的世界观和基本设定。"""
+        result = await graphrag_agent_instance.get_worldview_async()
+        return json.dumps(result, ensure_ascii=False)
+
     @tool
     async def local_search_tool(query: str) -> str:
         """使用 GraphRAG 的局部查询功能进行自定义搜索。输入是一个字符串形式的查询。"""
@@ -212,7 +221,29 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
     #     )
     #     # 选第一条节拍写一个场景（需要更多可拆循环）
     #     beat_first = "\n".join(beats.get("result","").split("\n")[:10])
+    #     # 2) 基于原著生成续写大纲与节拍（用 GraphRAG 保守抽纲）
+    #     outline = await graphrag_agent_instance.global_search_async(
+    #         f"基于原著信息，按照三幕式生成续写大纲（每幕3-5要点，标注涉及人物/地点/冲突/目标）；风格：{target_style}；用户意图：{brief}"
+    #     )
+    #     beats = await graphrag_agent_instance.global_search_async(
+    #         f"把以下大纲拆为节拍表（每节拍含：目的、冲突、转折、关键信息、涉及角色、证据需求），用紧凑清单：\n{outline.get('result','')[:2800]}"
+    #     )
+    #     # 选第一条节拍写一个场景（需要更多可拆循环）
+    #     beat_first = "\n".join(beats.get("result","").split("\n")[:10])
 
+    #     # 3) 写场景（用生成型 LLM）
+    #     sys = SystemMessage(content=(
+    #         "你是一名严谨的续写作者，必须遵守原著世界规则与角色性格。"
+    #         "生成文本要可直接发布，避免方向性描述。"
+    #         f"【风格护栏】{guard.get('result','')}\n【世界规则】{world.get('result','')}"
+    #     ))
+    #     user = HumanMessage(content=(
+    #         f"请写一个完整场景（不超过{words_per_scene}词）。"
+    #         f"要求：遵守人物口吻与设定、用对白推动剧情、细节具象、避免与原著冲突。\n"
+    #         f"【节拍】\n{beat_first}\n\n【用户意图】\n{brief}"
+    #     ))
+    #     gen = await llm_gen.ainvoke([sys, user])
+    #     scene = gen.content if hasattr(gen, "content") else str(gen)
     #     # 3) 写场景（用生成型 LLM）
     #     sys = SystemMessage(content=(
     #         "你是一名严谨的续写作者，必须遵守原著世界规则与角色性格。"
@@ -238,7 +269,31 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
     #             f"找出文本与原著叙述的冲突点（逐条列出冲突、对应原著证据ID/短摘）：{scene[:3000]}"
     #         )
     #         hard_fail = ("违背" in canon.get("result","")) or ("冲突" in contra.get("result",""))
+    #     # 4) 校验 & 可能修订（最多 max_iters 轮）
+    #     issues = []
+    #     for _ in range(max_iters+1):
+    #         # 一致性与冲突检查（用 GraphRAG 做证据对齐）
+    #         canon = await graphrag_agent_instance.local_search_async(
+    #             f"评估文本与正史/世界规则一致性（角色OOC/设定违背/历史违背各给要点与依据）：{scene[:3000]}"
+    #         )
+    #         contra = await graphrag_agent_instance.local_search_async(
+    #             f"找出文本与原著叙述的冲突点（逐条列出冲突、对应原著证据ID/短摘）：{scene[:3000]}"
+    #         )
+    #         hard_fail = ("违背" in canon.get("result","")) or ("冲突" in contra.get("result",""))
 
+    #         if not hard_fail:
+    #             # 收集关键断言证据（可选）
+    #             ev = await graphrag_agent_instance.local_search_async(
+    #                 "为上述续写中关键设定与角色动机找出最有力的证据片段（列章节/段落ID+短摘），最多5条。"
+    #             )
+    #             return json.dumps({
+    #                 "status": "DONE",
+    #                 "outline": outline,
+    #                 "beats": beats,
+    #                 "final_text": scene,
+    #                 "evidence": ev,
+    #                 "issues": issues
+    #             }, ensure_ascii=False)
     #         if not hard_fail:
     #             # 收集关键断言证据（可选）
     #             ev = await graphrag_agent_instance.local_search_async(
@@ -254,7 +309,18 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
     #             }, ensure_ascii=False)
 
     #         issues.append({"canon": canon.get("result",""), "conflict": contra.get("result","")})
+    #         issues.append({"canon": canon.get("result",""), "conflict": contra.get("result","")})
 
+    #         # 5) 修订指令（再喂回生成 LLM）
+    #         sys2 = SystemMessage(content=(
+    #             "根据评审意见修订文本，务必消除OOC与设定/历史冲突，保留节拍目标与风格护栏。"
+    #             f"【风格护栏】{guard.get('result','')}\n【评审】{json.dumps(issues[-1], ensure_ascii=False)[:1500]}"
+    #         ))
+    #         user2 = HumanMessage(content=(
+    #             f"请在不超过{words_per_scene}词内重写该场景：\n{scene[:2000]}"
+    #         ))
+    #         rev = await llm_gen.ainvoke([sys2, user2])
+    #         scene = rev.content if hasattr(rev, "content") else str(rev)
     #         # 5) 修订指令（再喂回生成 LLM）
     #         sys2 = SystemMessage(content=(
     #             "根据评审意见修订文本，务必消除OOC与设定/历史冲突，保留节拍目标与风格护栏。"
@@ -274,11 +340,20 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
     #         "final_text": scene,
     #         "issues": issues
     #     }, ensure_ascii=False)
+    #     # 达到迭代上限仍有问题
+    #     return json.dumps({
+    #         "status": "BUDGET_EXCEEDED",
+    #         "outline": outline,
+    #         "beats": beats,
+    #         "final_text": scene,
+    #         "issues": issues
+    #     }, ensure_ascii=False)
     tools = [
         get_characters_tool,
         get_relationships_tool,
         get_important_locations_tool,
         background_knowledge_tool,
+        get_worldview_tool,
         local_search_tool,
         global_search_tool,
         get_character_profile_tool,
@@ -316,11 +391,12 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
 
     prompt = f"""
     You are a helpful assistant that can answer questions about the data in the tables provided. Your tasks mainly consist of two parts: 1. extract and summarize the information about the book; 2. derivative work based on the book.
+    You are a helpful assistant that can answer questions about the data in the tables provided. Your tasks mainly consist of two parts: 1. extract and summarize the information about the book; 2. derivative work based on the book.
 
     ---Goal---
 你是一个智能创作助手，可以进行信息分析和探索，通过系统性的调查来完成复杂的创作任务。
 ## 历史对话
-历史对话信息
+{{history}}
 ## 用户问题
 {{input}}
 ## 调查周期 (Investigation Cycle)
@@ -360,18 +436,27 @@ async def main() -> None:
 
     print("LangChain Agent with GraphRAG (Python API) tools is ready. Type 'exit' to quit.")
 
+    history = []
+
     while True:
         user_query = input("\n请输入你的问题：")
+        history.append({"role": "user", "content": user_query})
+        recent_history = history[-4:]  # 只保留最近的5条历史记录
+        history_text = ""
+        for msg in recent_history:
+            prefix = "用户：" if msg["role"] == "user" else "助手："
+            history_text += f"{prefix}{msg['content']}\n"
         if user_query.lower() == 'exit':
             break
 
         try:
             # 使用异步调用，匹配异步工具
             # response = await agent_executor.ainvoke({"input": user_query, "guidelines": prompt_utils.build_guidelines(), "functions": agent_executor.tools, "requirements": prompt_utils.build_requirements(), "response_format": prompt_utils.build_response_format()})
-            response = await agent_executor.ainvoke({"input": user_query, "guidelines": prompt.build_guidelines(), "functions": agent_executor.tools, "requirements": prompt.build_requirements(), "response_format": prompt.build_response_format()})
+            response = await agent_executor.ainvoke({"input": user_query, "guidelines": prompt.build_guidelines(), "functions": agent_executor.tools, "requirements": prompt.build_requirements(), "response_format": prompt.build_response_format(), "history": history_text})
             print("\n--- Agent 回答 ---")
             print(response.get("output"))
             print("--------------------\n")
+            history.append({"role": "assistant", "content": response.get("output")})
         except Exception as e:
             print(f"发生错误：{e}")
             break

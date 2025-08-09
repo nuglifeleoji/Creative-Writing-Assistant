@@ -1,7 +1,13 @@
+
 import os
 import json
 import asyncio
 from typing import Dict, Any
+
+# 确保你已经安装了以下库
+# pip install langchain langchain-openai
+
+# 注意配置OPENAI_API_KEY以及graphrag所在路径(代码第172行)
 
 from dotenv import load_dotenv
 
@@ -15,14 +21,27 @@ from langchain.agents import tool
 from langchain.agents import create_react_agent, AgentExecutor, create_tool_calling_agent
 from langchain import hub
 from langchain_openai import ChatOpenAI,AzureChatOpenAI
-from prompt_utils import build_guidelines, build_requirements, build_response_format
-from search.global_search import global_search
+from langchain.prompts import ChatPromptTemplate
+from search.global_search import global_search as graphrag_global_search
 from search.local_search import local_search
+from prompt_utils import build_guidelines, build_requirements, build_response_format
 class GraphAnalysisAgent:
     def __init__(self):
-        self.global_search = global_search
+        self.global_search = graphrag_global_search
         self.local_search = local_search
     async def global_search_async(self, query: str) -> Dict[str, Any]:
+        """直接调用 agent.py 中的 global_search（GraphRAG GlobalSearch），返回精简文本。"""
+        try:
+            res = await graphrag_global_search(query)
+            # agent.py 当前可能返回结果对象或文本，这里统一抽取文本
+            text = getattr(res, "response", res)
+            if not isinstance(text, str):
+                text = str(text)
+            return {"method": "global", "query": query, "result": text, "success": True}
+        except Exception as e:
+            return {"method": "global", "query": query, "error": str(e), "success": False}
+
+    # 便捷封装：用 global_search 实现预置查询
         return await self.global_search(query)
 
     async def local_search_async(self, query: str) -> Dict[str, Any]:
@@ -122,8 +141,11 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         temperature=0.3
     )
 
-    
-    prompt = f"""
+
+    prompt = """
+    You are a helpful assistant that can answer questions about the data in the tables provided.
+
+    ---Goal---
 你是一个智能创作助手，可以进行信息分析和探索，通过系统性的调查来完成复杂的创作任务。
 ## 历史对话
 {{ history }}
@@ -146,6 +168,11 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
 {build_response_format()}
     """
 
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", prompt),
+        ("user", "{input}\n\n{agent_scratchpad}"),
+    ])
+
     # 创建 Agent
     agent = create_tool_calling_agent(llm=llm, tools=tools, prompt=prompt)
 
@@ -154,8 +181,6 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
 
 # --- 主程序入口 ---
 async def main() -> None:
-    # 初始化你的 GraphAnalysisAgent，传入 GraphRAG 项目的根目录
-    # rag_root 参数当前未使用（已改为直接调用 agent.py 的 global_search）
     graph_agent = GraphAnalysisAgent()
 
     # 使用这个实例创建 LangChain Agent
@@ -169,6 +194,7 @@ async def main() -> None:
             break
 
         try:
+            # 使用异步调用，匹配异步工具
             response = await agent_executor.ainvoke({"input": user_query})
             print("\n--- Agent 回答 ---")
             print(response.get("output"))

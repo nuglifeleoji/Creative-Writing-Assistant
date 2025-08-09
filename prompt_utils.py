@@ -35,18 +35,20 @@ def build_requirements() -> str:
 def build_response_format() -> str:
     # 保持与现有框架中的拼写一致（IN_PROGRES）
     return """\
-请严格按照以下 JSON 结构输出（不要添加多余字段）：
-{
-  "status_update": "IN_PROGRES" | "DONE",
-  "thought": "用1-3句中文概述本轮判断与下一步计划；不要输出推理链细节",
-  "answer": "当且仅当 status_update=DONE 时填写的最终回答（中文，条理清晰）",
-  "next_tool": "当且仅当 status_update=IN_PROGRES 时，填写下一个要调用的工具名称（与可用工具一致）",
-  "next_tool_args": { "k": "v" }
-}
-注意：
-- IN_PROGRES：必须给出 next_tool 与 next_tool_args；不要给出 answer
-- DONE：必须给出 answer；不要给出 next_tool 与 next_tool_args
-- thought 仅简述当前依据与计划，禁止长篇推理
+请严格按照readme格式输出你给的回答
 """
+
+# 请严格按照以下 JSON 结构输出（不要添加多余字段）：
+# {
+#   "status_update": "IN_PROGRES" | "DONE",
+#   "thought": "用1-3句中文概述本轮判断与下一步计划；不要输出推理链细节",
+#   "answer": "当且仅当 status_update=DONE 时填写的最终回答（中文，条理清晰）",
+#   "next_tool": "当且仅当 status_update=IN_PROGRES 时，填写下一个要调用的工具名称（与可用工具一致）",
+#   "next_tool_args": { "k": "v" }
+# }
+# 注意：
+# - IN_PROGRES：必须给出 next_tool 与 next_tool_args；不要给出 answer
+# - DONE：必须给出 answer；不要给出 next_tool 与 next_tool_args
+# - thought 仅简述当前依据与计划，禁止长篇推理
 
 

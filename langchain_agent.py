@@ -23,6 +23,7 @@ from langchain_openai import ChatOpenAI,AzureChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from search.global_search import global_search as graphrag_global_search
 from search.local_search import local_search
+import prompt_utils
 class GraphAnalysisAgent:
     def __init__(self):
         self.global_search = graphrag_global_search
@@ -140,15 +141,15 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
     )
 
 
-    prompt = """
+    prompt = f"""
     You are a helpful assistant that can answer questions about the data in the tables provided.
 
     ---Goal---
 你是一个智能创作助手，可以进行信息分析和探索，通过系统性的调查来完成复杂的创作任务。
 ## 历史对话
-{{ history }}
+历史对话信息
 ## 用户问题
-{{ user_query }}
+{{input}}
 ## 调查周期 (Investigation Cycle)
 你按照一个持续的周期运作：
 1. 从多个维度理解用户诉求，拆解用户问题，明确用户意图
@@ -157,13 +158,13 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
 4. 当你认为没完成任务时或现有信息无法回答用户问题时，"status_update" 为 "IN_PROGRES"，此时你必须选择一个工具。
 5. 当你认为历史对话的信息足够你回答用户问题时，"status_update" 为 "DONE"
 ## 可用工具 (Available Tools)
-{{ functions }}
+{{functions}}
 ## 工具使用准则 (Tool Usage Guidelines)
-{{ guidelines }}
+{{guidelines}}
 ## 注意事项
-{{ requirements }}
+{{requirements}}
 响应格式 (Response Format)
-{{ response_format }}
+{{response_format}}
     """
 
     prompt = ChatPromptTemplate.from_messages([
@@ -195,7 +196,7 @@ async def main() -> None:
 
         try:
             # 使用异步调用，匹配异步工具
-            response = await agent_executor.ainvoke({"input": user_query})
+            response = await agent_executor.ainvoke({"input": user_query, "guidelines": prompt_utils.build_guidelines(), "functions": agent_executor.tools, "requirements": prompt_utils.build_requirements(), "response_format": prompt_utils.build_response_format()})
             print("\n--- Agent 回答 ---")
             print(response.get("output"))
             print("--------------------\n")

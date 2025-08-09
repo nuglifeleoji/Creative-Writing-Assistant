@@ -94,13 +94,6 @@ class GraphAnalysisAgent:
         return await self.local_search_async(f"为以下大纲续写一个场景（不超过{words_per_scene}词）：{brief[:3000]}")
     async def imagine_conversation_async(self, character1_name: str, character2_name: str) -> Dict[str, Any]:
         return await self.local_search_async(f"想象{character1_name}和{character2_name}的对话")
-    async def get_plot_timeline_async(self, max_events: int = 30) -> Dict[str, Any]:
-        q = f"""
-    请抽取全书关键事件时间线，严格输出JSON数组（最多{max_events}条）：
-    [{{"order":1,"time":"相对/具体时间","event":"…","characters":["…"],"location":"…","evidence":[{{"chapter":"…","quote":"<=40字"}}]}}]
-    要求：仅书内有证据的事件；按发生顺序；不要额外解释。
-    """
-        return await self.global_search_async(q)
     async def extract_quotes_async(self, name:str, n:int=8) -> Dict[str, Any]:
         q = f"列出{name}最具代表性的台词{n}条（每条<=40字，附章节/段落编号），严格JSON数组："
         return await self.local_search_async(q)
@@ -233,11 +226,6 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
     async def imagine_conversation_tool(character1_name: str, character2_name: str) -> str:
         """想象两个角色之间的对话。"""
         result = await graphrag_agent_instance.imagine_conversation_async(character1_name, character2_name)
-        return json.dumps(result, ensure_ascii=False)
-    @tool
-    async def get_plot_timeline_tool(max_events: int = 30) -> str:
-        """获取本书的关键事件时间线。"""
-        result = await graphrag_agent_instance.get_plot_timeline_async(max_events)
         return json.dumps(result, ensure_ascii=False)
     @tool
     async def extract_quotes_tool(name:str, n:int=8) -> str:
@@ -446,7 +434,6 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         get_conflict_tool,
         get_related_characters_tool,
         imagine_conversation_tool,
-        get_plot_timeline_tool,
         extract_quotes_tool,
         narrative_pov_tool,
         get_motifs_symbols_tool, 

@@ -27,6 +27,19 @@ class GraphAnalysisAgent:
         self.global_search = global_search
         self.local_search = local_search
     async def global_search_async(self, query: str) -> Dict[str, Any]:
+        """直接调用 agent.py 中的 global_search（GraphRAG GlobalSearch），返回精简文本。"""
+        try:
+            from global_search import global_search as graphrag_global_search
+            res = await graphrag_global_search(query)
+            # agent.py 当前可能返回结果对象或文本，这里统一抽取文本
+            text = getattr(res, "response", res)
+            if not isinstance(text, str):
+                text = str(text)
+            return {"method": "global", "query": query, "result": text, "success": True}
+        except Exception as e:
+            return {"method": "global", "query": query, "error": str(e), "success": False}
+
+    # 便捷封装：用 global_search 实现预置查询
         return await self.global_search(query)
 
     async def local_search_async(self, query: str) -> Dict[str, Any]:

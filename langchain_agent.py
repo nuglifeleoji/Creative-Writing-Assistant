@@ -20,6 +20,7 @@ from langchain.agents import tool
 from langchain.agents import create_react_agent, AgentExecutor, create_tool_calling_agent
 from langchain import hub
 from langchain_openai import ChatOpenAI,AzureChatOpenAI
+from langchain.prompts import ChatPromptTemplate
 from search.global_search import global_search as graphrag_global_search
 from search.local_search import local_search
 class GraphAnalysisAgent:
@@ -142,10 +143,6 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
     prompt = """
     You are a helpful assistant that can answer questions about the data in the tables provided.
 
-    ---Data tables---
-
-    {context_data}
-
     ---Goal---
 你是一个智能创作助手，可以进行信息分析和探索，通过系统性的调查来完成复杂的创作任务。
 ## 历史对话
@@ -168,6 +165,11 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
 响应格式 (Response Format)
 {{ response_format }}
     """
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", prompt),
+        ("user", "{input}\n\n{agent_scratchpad}"),
+    ])
 
     # 创建 Agent
     agent = create_tool_calling_agent(llm=llm, tools=tools, prompt=prompt)

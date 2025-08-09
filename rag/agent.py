@@ -126,5 +126,5 @@ async def global_search(query: str):
     # print(results.response)
     return results
 
-# asyncio.run(global_search("What are the top themes of the story?"))
+asyncio.run(global_search("列出故事中的所有人物角色。"))
 

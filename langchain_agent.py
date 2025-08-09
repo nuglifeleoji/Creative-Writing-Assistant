@@ -161,11 +161,11 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
 ## 可用工具 (Available Tools)
 {{ functions }}
 ## 工具使用准则 (Tool Usage Guidelines)
-{build_guidelines()}
+{{ guidelines }}
 ## 注意事项
-{build_requirements()}
+{{ requirements }}
 响应格式 (Response Format)
-{build_response_format()}
+{{ response_format }}
     """
 
     prompt = ChatPromptTemplate.from_messages([

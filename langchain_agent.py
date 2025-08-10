@@ -494,6 +494,23 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         """比较两个角色。"""
         result = await graphrag_agent_instance.compare_characters_async(a, b)
         return json.dumps(result, ensure_ascii=False, default=str)
+    
+    @tool
+    async def system_status_tool() -> str:
+        """获取系统状态信息，包括可用工具、处理能力等"""
+        return json.dumps({
+            "system_status": "running",
+            "available_tools": [
+                "global_search_tool", "local_search_tool", "get_characters_tool",
+                "get_relationships_tool", "background_knowledge_tool", "llm_generate_tool",
+                "llm_analyze_tool", "get_character_profile_tool", "get_worldview_tool"
+            ],
+            "capabilities": [
+                "人物分析", "关系分析", "背景知识查询", "情节分析", "文本生成", "创意写作"
+            ],
+            "specialization": "《沙丘》(Dune)系列小说分析",
+            "note": "系统已优化，支持详细回答和用户友好的状态提示"
+        }, ensure_ascii=False, default=str)
 
     tools = [
         # === 新增的RAG检索分离工具 ===
@@ -531,6 +548,7 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         build_story_outline_tool,
         emotion_curve_tool,
         compare_characters_tool,
+        system_status_tool,
     ]
 
     # 初始化 LLM
@@ -558,7 +576,7 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
 
 
     prompt = f"""
-你是一个智能创作助手，可以进行信息分析和探索，通过系统性的调查来完成复杂的创作任务。
+你是一个智能创作助手，专门分析《沙丘》(Dune)系列小说，可以进行信息分析和探索，通过系统性的调查来完成复杂的创作任务。
 
 ## 重要说明：RAG检索分离工具和独立LLM调用
 现在你有新的工具可以分离RAG的检索和生成过程，以及独立的LLM调用：
@@ -583,6 +601,14 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
 - 🤖 [LLM生成] 表示正在调用大模型生成内容
 - ✅ 表示操作完成
 - ❌ 表示操作失败
+
+### 智能决策指南：
+- **人物相关问题**：优先使用 get_character_profile_tool 或 get_characters_tool
+- **关系分析**：使用 get_relationships_tool 分析人物关系
+- **背景知识**：使用 background_knowledge_tool 或 get_worldview_tool
+- **情节分析**：使用 global_search_tool 进行全局分析
+- **具体细节**：使用 local_search_tool 进行精确检索
+- **创作任务**：使用 llm_generate_tool 进行创造性生成
 
 ## 历史对话
 {{history}}
@@ -623,7 +649,13 @@ async def main() -> None:
     # 使用这个实例创建 LangChain Agent
     agent_executor = create_graphrag_agent(graph_agent)
 
-    print("LangChain Agent with GraphRAG (Python API) tools is ready. Type 'exit' to quit.")
+    print("=" * 60)
+    print("🤖 《沙丘》智能分析助手已启动")
+    print("=" * 60)
+    print("📚 专精：《沙丘》(Dune)系列小说分析")
+    print("🔧 功能：人物分析、关系分析、背景知识、情节分析、创意写作")
+    print("💡 提示：输入 'help' 查看帮助，输入 'exit' 退出")
+    print("=" * 60)
     history = []
     
     while True:
@@ -636,17 +668,56 @@ async def main() -> None:
             history_text += f"{prefix}{msg['content']}\n"
         if user_query.lower() == 'exit':
             break
+        elif user_query.lower() == 'help':
+            print("\n" + "=" * 60)
+            print("📖 《沙丘》智能分析助手 - 使用帮助")
+            print("=" * 60)
+            print("🎯 主要功能：")
+            print("  • 人物分析：查询角色背景、性格、动机")
+            print("  • 关系分析：分析人物之间的关系")
+            print("  • 背景知识：了解世界观、设定、历史")
+            print("  • 情节分析：分析故事发展、冲突、转折")
+            print("  • 创意写作：基于原著进行续写、对话生成")
+            print("\n💬 示例问题：")
+            print("  • '保罗·阿特雷德斯的性格特点是什么？'")
+            print("  • '保罗和杰西卡的关系如何？'")
+            print("  • '香料在沙丘世界中的作用是什么？'")
+            print("  • 'Bene Gesserit姐妹会的目标是什么？'")
+            print("  • '请分析沙丘的主要冲突'")
+            print("\n🔧 系统状态：")
+            print("  • 输入 'status' 查看系统状态")
+            print("  • 输入 'exit' 退出程序")
+            print("=" * 60)
+            continue
+        elif user_query.lower() == 'status':
+            print("\n🔧 正在获取系统状态...")
+            try:
+                status_response = await agent_executor.ainvoke({"input": "请调用system_status_tool获取系统状态信息"})
+                if status_response and status_response.get("output"):
+                    print(status_response.get("output"))
+                else:
+                    print("❌ 无法获取系统状态")
+            except Exception as e:
+                print(f"❌ 获取系统状态失败：{e}")
+            continue
         
         try:
+            print(f"\n🤖 [Agent处理] 正在处理您的问题...")
             # 使用异步调用，匹配异步工具
-            # response = await agent_executor.ainvoke({"input": user_query, "guidelines": prompt_utils.build_guidelines(), "functions": agent_executor.tools, "requirements": prompt_utils.build_requirements(), "response_format": prompt_utils.build_response_format()})
             response = await agent_executor.ainvoke({"input": user_query, "guidelines": prompt.build_guidelines(), "functions": agent_executor.tools, "requirements": prompt.build_requirements(), "response_format": prompt.build_response_format(), "history": history_text})
-            # print("\n--- Agent 回答 ---")
-            # print(response.get("output"))
-            # print("--------------------\n")
-            # history.append({"role": "assistant", "content": response.get("output")})
+            
+            # 显示Agent的回答
+            if response and response.get("output"):
+                print(f"\n📝 [Agent回答]")
+                print("=" * 50)
+                print(response.get("output"))
+                print("=" * 50)
+                history.append({"role": "assistant", "content": response.get("output")})
+            else:
+                print("❌ [错误] Agent没有返回有效回答")
+                
         except Exception as e:
-            print(f"发生错误：{e}")
+            print(f"❌ [错误] 发生错误：{e}")
             break
 
 

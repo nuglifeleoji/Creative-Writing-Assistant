@@ -99,6 +99,7 @@ def build_requirements() -> str:
 def build_response_format() -> str:
     return """\
 # 响应格式
+严格使用中文回答！！！
 
 ## 1) 处理中（IN_PROGRES / NEED_CLARIFICATION）
 ```markdown
@@ -120,8 +121,8 @@ next_actions:
 
 ## 2) 完成（DONE）
 在总结书中信息时可以分条叙述：
-**论点1**: ...
-**论点2**: ...
+**...**: ...
+**...**: ...
 在进行二次创作时以段落方式呈现，且尽量具体和详细，类似小说的写法，不必分条。
 
 ##3) 超预算终止（BUDGET_EXCEEDED）

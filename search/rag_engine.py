@@ -231,18 +231,11 @@ class RAGEngine:
             print(f"🔍 [RAG检索] 正在检索全局信息: {query}")
             
             # 获取检索结果（通过上下文构建器）
-            # 尝试同步调用，如果失败再尝试异步调用
-            try:
-                context = self.global_context_builder.build_context(
-                    query=query,
-                    **self.global_context_params
-                )
-            except TypeError:
-                # 如果同步调用失败，尝试异步调用
-                context = await self.global_context_builder.build_context(
-                    query=query,
-                    **self.global_context_params
-                )
+            # build_context 是异步方法，需要 await
+            context = await self.global_context_builder.build_context(
+                query=query,
+                **self.global_context_params
+            )
             
             # 截断上下文以避免token超限
             # 更安全地处理context对象
@@ -347,18 +340,11 @@ class RAGEngine:
             print(f"🔍 [RAG检索] 正在检索局部信息: {query}")
             
             # 获取检索结果（通过上下文构建器）
-            # 尝试同步调用，如果失败再尝试异步调用
-            try:
-                context = self.local_context_builder.build_context(
-                    query=query,
-                    **self.local_context_params
-                )
-            except TypeError:
-                # 如果同步调用失败，尝试异步调用
-                context = await self.local_context_builder.build_context(
-                    query=query,
-                    **self.local_context_params
-                )
+            # LocalSearchMixedContext.build_context 是同步方法，不需要 await
+            context = self.local_context_builder.build_context(
+                query=query,
+                **self.local_context_params
+            )
             
             # 截断上下文以避免token超限
             # 更安全地处理context对象

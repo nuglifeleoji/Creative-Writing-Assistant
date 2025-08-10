@@ -83,6 +83,31 @@ context_builder = GlobalCommunityContext(
     token_encoder=token_encoder,
 )
 
+async def global_retrieve(query: str):
+    results = await context_builder.build_context(query=query, conversation_history=None, max_context_tokens=12_000, 
+            use_community_summary=False,
+            shuffle_data=True,
+            include_community_rank=True,
+            min_community_rank=0,
+            community_rank_name="rank",
+            include_community_weight=True,
+            community_weight_name="occurrence weight",
+            normalize_community_weight=True,
+            max_tokens=10000,  # 从4000增加到10000
+    )
+    text = results.context_chunks
+    tokenizer = tiktoken.get_encoding("cl100k_base")
+    full_text = "\n".join(text)
+    tokens = tokenizer.encode(full_text)
+    max_tokens = 8000
+    truncated_tokens = tokens[:max_tokens]
+    context = tokenizer.decode(truncated_tokens)
+    print(context)
+    return context
+
+if __name__ == "__main__":
+    asyncio.run(global_retrieve("top themes"))
+
 context_builder_params = {
     "use_community_summary": False,  # False means using full community reports. True means using community short summaries.
     "shuffle_data": True,

@@ -128,6 +128,12 @@ class GraphAnalysisAgent:
     {{"values":["…"],"goals":["…"],"methods":["…"],"red_lines":["…"],"decision_style":"冲动|谨慎|算计","evidence":[{{"chapter":"…","quote":"<=40字"}}]}}
     """
         return await self.global_search_full_async(q)
+    async def get_people_location_relation_async(self, people:str, location:str, relation:str) -> Dict[str, Any]:
+        q = f"""
+    分析{people}和{location}之间的关系，严格JSON：
+    {{"values":["…"],"goals":["…"],"methods":["…"],"red_lines":["…"],"decision_style":"冲动|谨慎|算计","evidence":[{{"chapter":"…","quote":"<=40字"}}]}}
+    """
+        return await self.global_search_full_async(q)
 
 # --- 第二步：创建 LangChain Agent ---
 def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentExecutor:
@@ -511,7 +517,11 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
             "specialization": "《沙丘》(Dune)系列小说分析",
             "note": "系统已优化，支持详细回答和用户友好的状态提示"
         }, ensure_ascii=False, default=str)
-
+    @tool 
+    async def get_people_location_relation_tool(people:str, location:str, relation:str) -> str:
+        """获取特定人物和地点之间的关系。"""
+        result = await graphrag_agent_instance.get_people_location_relation_async(people, location, relation)
+        return json.dumps(result, ensure_ascii=False, default=str)
     tools = [
         # === 新增的RAG检索分离工具 ===
         global_search_retrieve_tool,
@@ -549,6 +559,7 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         emotion_curve_tool,
         compare_characters_tool,
         system_status_tool,
+        get_people_location_relation_tool,
     ]
 
     # 初始化 LLM

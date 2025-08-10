@@ -231,13 +231,33 @@ class RAGEngine:
             print(f"🔍 [RAG检索] 正在检索全局信息: {query}")
             
             # 获取检索结果（通过上下文构建器）
-            context = await self.global_context_builder.build_context(
-                query=query,
-                **self.global_context_params
-            )
+            # 尝试同步调用，如果失败再尝试异步调用
+            try:
+                context = self.global_context_builder.build_context(
+                    query=query,
+                    **self.global_context_params
+                )
+            except TypeError:
+                # 如果同步调用失败，尝试异步调用
+                context = await self.global_context_builder.build_context(
+                    query=query,
+                    **self.global_context_params
+                )
             
             # 截断上下文以避免token超限
-            context_text = context.context_text if hasattr(context, 'context_text') else str(context)
+            # 更安全地处理context对象
+            if hasattr(context, 'context_text'):
+                context_text = context.context_text
+            elif hasattr(context, 'text'):
+                context_text = context.text
+            elif hasattr(context, 'content'):
+                context_text = context.content
+            elif hasattr(context, 'response'):
+                context_text = context.response
+            else:
+                # 如果都没有，尝试转换为字符串
+                context_text = str(context)
+            
             truncated_context = self._truncate_text(context_text, max_tokens=8000)  # 从3000增加到8000
             
             print(f" [RAG检索] 全局检索完成，获得 {len(truncated_context)} 字符的上下文")
@@ -327,13 +347,33 @@ class RAGEngine:
             print(f"🔍 [RAG检索] 正在检索局部信息: {query}")
             
             # 获取检索结果（通过上下文构建器）
-            context = await self.local_context_builder.build_context(
-                query=query,
-                **self.local_context_params
-            )
+            # 尝试同步调用，如果失败再尝试异步调用
+            try:
+                context = self.local_context_builder.build_context(
+                    query=query,
+                    **self.local_context_params
+                )
+            except TypeError:
+                # 如果同步调用失败，尝试异步调用
+                context = await self.local_context_builder.build_context(
+                    query=query,
+                    **self.local_context_params
+                )
             
             # 截断上下文以避免token超限
-            context_text = context.context_text if hasattr(context, 'context_text') else str(context)
+            # 更安全地处理context对象
+            if hasattr(context, 'context_text'):
+                context_text = context.context_text
+            elif hasattr(context, 'text'):
+                context_text = context.text
+            elif hasattr(context, 'content'):
+                context_text = context.content
+            elif hasattr(context, 'response'):
+                context_text = context.response
+            else:
+                # 如果都没有，尝试转换为字符串
+                context_text = str(context)
+            
             truncated_context = self._truncate_text(context_text, max_tokens=8000)  # 从3000增加到8000
             
             print(f" [RAG检索] 局部检索完成，获得 {len(truncated_context)} 字符的上下文")

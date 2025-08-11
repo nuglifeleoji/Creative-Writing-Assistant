@@ -107,9 +107,7 @@ class StreamingCallbackHandler(BaseCallbackHandler):
         })
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
-        # 实时发送每个token给前端
         self._send("llm_token", {"token": token})
-        print(f"🔤 实时token: {repr(token)}")
 
     def on_llm_end(self, response, **kwargs: Any) -> None:
         usage = {}
@@ -246,29 +244,13 @@ def chat():
                     def run_agent():
                         try:
                             print(f"🤖 开始执行代理: {message}")
-                            
-                            # 使用流式执行
-                            async def stream_agent():
-                                final_result = None
-                                async for chunk in graph_agent.astream(
+                            resp = loop.run_until_complete(
+                                graph_agent.ainvoke(
                                     {"input": message, "chat_history": chat_history},
                                     config={"callbacks": [callback_handler]}
-                                ):
-                                    print(f"🔄 收到流式chunk: {type(chunk)}")
-                                    # 处理流式输出的chunk
-                                    if isinstance(chunk, dict):
-                                        # 如果chunk包含最终输出
-                                        if 'output' in chunk:
-                                            final_result = chunk
-                                        # 处理中间步骤
-                                        for key, value in chunk.items():
-                                            if key in ['intermediate_steps', 'steps']:
-                                                print(f"📊 处理中间步骤: {key}")
-                                
-                                return final_result
-                            
-                            resp = loop.run_until_complete(stream_agent())
-                            print(f"✅ 代理流式执行完成: {type(resp)}")
+                                )
+                            )
+                            print(f"✅ 代理执行完成: {type(resp)}")
                             callback_queue.put(("response", resp))
                         except Exception as e:
                             print(f"❌ 代理执行失败: {e}")

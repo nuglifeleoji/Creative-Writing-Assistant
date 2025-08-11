@@ -6,6 +6,7 @@ let currentBook = null;
 let chatHistory = [];
 let isProcessing = false;
 let elements = {};
+let currentAbortController = null;
 
 // 聊天记录持久化
 function saveChatHistory() {
@@ -250,6 +251,10 @@ async function sendMessage() {
     // 显示加载状态
     showLoading(true);
     isProcessing = true;
+    toggleStopButton(true);
+    
+    // 创建新的AbortController
+    currentAbortController = new AbortController();
     
             // 清空并显示思考过程
         clearThinkingProcess();
@@ -287,7 +292,8 @@ async function sendMessage() {
                 currentBook: currentBook,
                 history: chatHistory.slice(-10),
                 stream: true  // 启用流式响应
-            })
+            }),
+            signal: currentAbortController.signal
         });
         
         console.log('📡 收到后端响应，状态:', response.status);
@@ -320,12 +326,14 @@ async function sendMessage() {
             let currentEvent = null;
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
+                console.log('🔍 处理行:', i, '内容:', JSON.stringify(line));
                 
                 if (line.startsWith('event: ')) {
                     currentEvent = line.slice(7);
                     console.log('📡 收到事件类型:', currentEvent);
                 } else if (line.startsWith('data: ') && currentEvent) {
                     const data = line.slice(6);
+                    console.log('📊 处理数据行，事件类型:', currentEvent, '数据长度:', data.length);
                     
                     if (currentEvent === 'done') {
                         console.log('🏁 收到done事件，准备结束流');
@@ -344,6 +352,7 @@ async function sendMessage() {
                         // 根据事件类型处理
                         if (currentEvent === 'final') {
                             console.log('🎯 前端收到final事件:', parsed);
+                            console.log('🔍 final事件数据结构:', JSON.stringify(parsed, null, 2));
                             finalResponse = parsed;
                             updateAssistantMessage(assistantMessageId, { type: 'final', ...parsed }, finalResponse);
                         } else if (currentEvent === 'error') {
@@ -355,7 +364,7 @@ async function sendMessage() {
                             handleSSEEvent(currentEvent, parsed, assistantMessageId);
                         }
                         
-                        currentEvent = null;
+                        // 不要立即重置currentEvent，让它在下一个event行或空行时重置
                     } catch (e) {
                         console.error('❌ 解析SSE数据失败:', e);
                         console.error('❌ 事件类型:', currentEvent);
@@ -377,11 +386,20 @@ async function sendMessage() {
         
     } catch (error) {
         console.error('❌ 发送消息失败:', error);
-        addMessage('system', '抱歉，发送消息时出现错误。请稍后重试。');
-        addThinkingStep('error', '请求失败', error.message);
+        
+        // 检查是否是用户主动取消
+        if (error.name === 'AbortError') {
+            console.log('🛑 请求被用户取消');
+            // 不显示错误消息，因为stopGeneration函数已经显示了停止消息
+        } else {
+            addMessage('system', '抱歉，发送消息时出现错误。请稍后重试。');
+            addThinkingStep('error', '请求失败', error.message);
+        }
     } finally {
         showLoading(false);
         isProcessing = false;
+        toggleStopButton(false);
+        currentAbortController = null;
     }
 }
 
@@ -519,6 +537,14 @@ function updateAssistantMessage(messageId, data, finalResponse) {
     switch (data.type) {
         case 'final':
             console.log('🎯 显示最终回答:', data.response);
+            console.log('🔍 final数据完整结构:', JSON.stringify(data, null, 2));
+            
+            // 检查response字段是否存在
+            if (!data.response) {
+                console.error('❌ final事件中缺少response字段!', data);
+                messageText.innerHTML = '<div class="error-message">❌ 响应数据格式错误</div>';
+                return;
+            }
             
             // 先显示开始输出的提示
             addThinkingStep('info', '✍️ 开始输出回答', '正在为你生成回答...');
@@ -656,7 +682,7 @@ async function switchBook(bookName) {
             updateCurrentBook(bookName);
             
             // 在聊天框中显示切换消息
-            addMessage('system', `✅ 已成功切换到书本: <strong>${bookName}</strong>`);
+            addMessage('assistant', `✅ 已成功切换到书本: <strong>${bookName}</strong>`);
             
             // 更新书本列表中的活动状态
             document.querySelectorAll('.book-item').forEach(item => {
@@ -740,7 +766,7 @@ function showAddBookModal() {
             if (response.ok) {
                 closeModal();
                 listBooks(); // 重新加载书本列表
-                addMessage('system', `书本 "${bookData.name}" 已成功添加`);
+                addMessage('assistant', `📚 书本 "${bookData.name}" 已成功添加`);
             } else {
                 const error = await response.text();
                 alert('添加书本失败: ' + error);
@@ -782,8 +808,8 @@ function clearChat() {
         localStorage.removeItem('chatHistory');
         
         // 重新添加欢迎消息
-        addMessage('system', `
-            <h3>欢迎使用智能创作助手！</h3>
+        addMessage('assistant', `
+            <h3>🤖 欢迎使用智能创作助手！</h3>
             <p>我可以帮助你进行文本分析、创作和探索。请先选择一个书本，然后开始你的创作之旅。</p>
             <div class="quick-actions">
                 <button class="quick-action-btn" onclick="listBooks()">
@@ -937,11 +963,47 @@ function addThinkingStep(type, title, content) {
     }
 }
 
+// 停止生成
+function stopGeneration() {
+    console.log('🛑 用户请求停止生成');
+    
+    if (currentAbortController) {
+        currentAbortController.abort();
+        currentAbortController = null;
+    }
+    
+    // 重置UI状态
+    showLoading(false);
+    isProcessing = false;
+    toggleStopButton(false);
+    
+    // 显示停止消息
+    addMessage('assistant', '🛑 生成已停止');
+    
+    console.log('✅ 生成已停止');
+}
+
+// 切换停止按钮显示状态
+function toggleStopButton(show) {
+    if (elements.stopBtn && elements.sendBtn) {
+        if (show) {
+            elements.stopBtn.style.display = 'block';
+            elements.sendBtn.style.display = 'none';
+        } else {
+            elements.stopBtn.style.display = 'none';
+            elements.sendBtn.style.display = 'block';
+        }
+    }
+}
+
 // 事件监听器初始化
 function initializeEventListeners() {
     // 发送消息
     if (elements.sendBtn) {
         elements.sendBtn.addEventListener('click', sendMessage);
+    }
+    if (elements.stopBtn) {
+        elements.stopBtn.addEventListener('click', stopGeneration);
     }
     if (elements.messageInput) {
         elements.messageInput.addEventListener('keydown', handleKeyDown);
@@ -1016,6 +1078,7 @@ document.addEventListener('DOMContentLoaded', function() {
         elements = {
             messageInput: document.getElementById('messageInput'),
             sendBtn: document.getElementById('sendBtn'),
+            stopBtn: document.getElementById('stopBtn'),
             chatMessages: document.getElementById('chatMessages'),
             sidebarToggle: document.getElementById('sidebarToggle'),
             sidebar: document.querySelector('.sidebar'),

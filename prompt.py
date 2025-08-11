@@ -19,7 +19,7 @@ def build_guidelines() -> str:
 - **get_conflict_matrix（冲突矩阵）**
 - **get_causal_chains（因果链）**
 - **get_worldview_tool(世界观)**
-    在进行二次创作任务时应先调用此工具获取书中的世界观信息。
+    在进行二次创作任务时可以考虑先调用此工具获取书中的世界观信息。
 
 > 选择矩阵：
 - 精确事实 → local_search。如：要求介绍书中的某个人物或某件事。

@@ -1,6 +1,7 @@
 import os
 import json
 import asyncio
+import tiktoken
 from typing import Dict, Any
 
 # 确保你已经安装了以下库
@@ -15,7 +16,6 @@ load_dotenv("./.env")
 # 优先读取 OPENAI_API_KEY，其次 AZURE_OPENAI_API_KEY，不要把密钥当作环境变量名
 api_key =os.getenv("AZURE_OPENAI_API_KEY") or ""
 
-import tiktoken
 from langchain.agents import tool
 from langchain.agents import create_react_agent, AgentExecutor, create_tool_calling_agent
 from langchain import hub
@@ -196,7 +196,7 @@ class GraphAnalysisAgent:
         return await self.global_search_full_async("获取故事的世界观和基本设定")
 
     async def get_character_profile_async(self, character_name: str) -> Dict[str, Any]:
-        return await self.global_search_full_async(f"获取{character_name}的详细信息")
+        return await self.local_search_full_async(f"获取{character_name}的详细信息")
     
     async def get_significant_event_async(self, event_name:str) -> Dict[str, Any]:
         return await self.global_search_full_async(f"获取事件{event_name}的详细信息")
@@ -258,6 +258,30 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
     """
     创建并返回一个可以调用 GraphRAG 命令行功能的 LangChain Agent。
     """
+
+    # 初始化 LLM（提前定义，供工具使用）
+    # 确保你已经设置了 OPENAI_API_KEY 环境变量
+    llm = AzureChatOpenAI(
+        openai_api_version="2025-01-01-preview",
+        azure_deployment="gpt-4.1",
+        model_name="gpt-4.1",
+        azure_endpoint="https://tcamp.openai.azure.com/",
+        openai_api_key=api_key,
+        temperature=0.3,
+        max_tokens=2000,  # 从800增加到2000
+        streaming=True,
+        callbacks=[StreamingStdOutCallbackHandler()]
+    )
+    llm_gen = AzureChatOpenAI(
+        openai_api_version="2025-01-01-preview",
+        azure_deployment="gpt-4.1",
+        model_name="gpt-4.1",
+        azure_endpoint="https://tcamp.openai.azure.com/",
+        openai_api_key=api_key,
+        temperature=0.85,   # 更高创造性
+        max_tokens=2000     # 从1000增加到2000
+    )
+
     # 使用 @tool 装饰器，将 GraphAnalysisAgent 的方法包装成 LangChain 工具
     # 注意：这里的工具函数需要能够被 Agent 直接调用，所以我们使用闭包来传递实例
     
@@ -700,6 +724,462 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         """获取特定人物和地点之间的关系。"""
         result = await graphrag_agent_instance.get_people_location_relation_async(people, location, relation)
         return json.dumps(result, ensure_ascii=False, default=str)
+    
+    # === 新增：分块处理工具 ===
+    @tool
+    async def parallel_chunk_analysis_tool(retrieved_context: str, query: str, analysis_type: str = "general") -> str:
+        """
+        对RAG检索到的内容进行分块并行分析
+        
+        Args:
+            retrieved_context: RAG检索到的完整内容（JSON格式）
+            query: 原始查询
+            analysis_type: 分析类型 (general, character, theme, plot, relationship等)
+        """
+        try:
+            print(f"🔄 [分块分析] 开始对检索内容进行分块并行分析")
+            
+            # 解析检索上下文
+            if isinstance(retrieved_context, str):
+                try:
+                    context_data = json.loads(retrieved_context)
+                except:
+                    context_data = {"full_text": retrieved_context}
+            else:
+                context_data = retrieved_context
+            
+            # 获取分块信息
+            chunks = context_data.get("chunks", [])
+            if not chunks:
+                # 如果没有分块，使用完整文本
+                full_text = context_data.get("full_text", str(context_data))
+                # 手动分块
+                token_encoder = tiktoken.get_encoding("cl100k_base")
+                tokens = token_encoder.encode(full_text)
+                
+                chunk_size = 20000
+                overlap = 2000
+                chunks = []
+                
+                for i in range(0, len(tokens), chunk_size - overlap):
+                    chunk_tokens = tokens[i:i + chunk_size]
+                    chunk_text = token_encoder.decode(chunk_tokens)
+                    chunks.append({
+                        "chunk_id": len(chunks),
+                        "text": chunk_text,
+                        "chunk_tokens": len(chunk_tokens)
+                    })
+            
+            print(f"📊 [分块分析] 将处理 {len(chunks)} 个分块")
+            
+            # 根据分析类型选择提示词
+            analysis_prompts = {
+                "general": f"基于以下内容回答问题：{query}\\n\\n请提供详细、准确的分析。",
+                "character": f"从人物角度分析以下内容，重点关注：{query}\\n\\n请识别相关人物、性格特点、行为动机等。",
+                "theme": f"从主题角度分析以下内容，重点关注：{query}\\n\\n请识别主要主题、象征意义、深层含义等。",
+                "plot": f"从情节角度分析以下内容，重点关注：{query}\\n\\n请识别关键事件、因果关系、情节发展等。",
+                "relationship": f"从关系角度分析以下内容，重点关注：{query}\\n\\n请识别人物关系、交互模式、关系发展等。"
+            }
+            
+            base_prompt = analysis_prompts.get(analysis_type, analysis_prompts["general"])
+            
+            # 并行处理每个分块
+            async def analyze_chunk(chunk):
+                chunk_id = chunk.get("chunk_id", "unknown")
+                chunk_text = chunk.get("text", "")
+                
+                print(f"  📝 [分块 {chunk_id}] 正在分析 ({chunk.get('chunk_tokens', 0)} tokens)")
+                
+                prompt = f"{base_prompt}\\n\\n=== 内容分块 {chunk_id} ===\\n{chunk_text}"
+                
+                try:
+                    # 使用 llm_gen 进行分析
+                    response = await llm_gen.ainvoke([HumanMessage(content=prompt)])
+                    
+                    return {
+                        "chunk_id": chunk_id,
+                        "analysis": response.content,
+                        "success": True,
+                        "chunk_tokens": chunk.get("chunk_tokens", 0)
+                    }
+                except Exception as e:
+                    print(f"    ❌ [分块 {chunk_id}] 分析失败: {e}")
+                    return {
+                        "chunk_id": chunk_id,
+                        "analysis": f"分析失败: {str(e)}",
+                        "success": False,
+                        "error": str(e)
+                    }
+            
+            # 并行执行所有分块分析
+            import asyncio
+            chunk_results = await asyncio.gather(*[analyze_chunk(chunk) for chunk in chunks])
+            
+            # 统计结果
+            successful_chunks = [r for r in chunk_results if r.get("success", False)]
+            failed_chunks = [r for r in chunk_results if not r.get("success", False)]
+            
+            print(f"✅ [分块分析] 完成：{len(successful_chunks)}/{len(chunks)} 个分块成功")
+            
+            # 为了避免返回的JSON过大，对分析结果进行严格裁剪
+            processed_results = []
+            for result in chunk_results:
+                if result.get("success", False):
+                    analysis_content = result.get("analysis", "")
+                    # 更严格的裁剪：最多保留2000字符
+                    max_analysis_length = 2000
+                    if len(analysis_content) > max_analysis_length:
+                        truncated_analysis = analysis_content[:max_analysis_length-150] + f"\\n\\n[注：此分析结果已裁剪，原长度 {len(analysis_content)} 字符，已压缩以避免上下文超限]"
+                    else:
+                        truncated_analysis = analysis_content
+                    
+                    processed_results.append({
+                        "chunk_id": result.get("chunk_id"),
+                        "analysis": truncated_analysis,
+                        "success": True,
+                        "chunk_tokens": result.get("chunk_tokens", 0),
+                        "original_length": len(analysis_content),
+                        "compressed": len(analysis_content) > max_analysis_length
+                    })
+                else:
+                    processed_results.append(result)
+            
+            # 统计压缩情况
+            compressed_count = sum(1 for r in processed_results if r.get("compressed", False))
+            if compressed_count > 0:
+                print(f"📉 [结果压缩] {compressed_count}/{len(processed_results)} 个分析结果已压缩")
+            
+            result = {
+                "method": "parallel_chunk_analysis",
+                "query": query,
+                "analysis_type": analysis_type,
+                "total_chunks": len(chunks),
+                "successful_chunks": len(successful_chunks),
+                "failed_chunks": len(failed_chunks),
+                "chunk_analyses": processed_results,
+                "ready_for_summary": True,
+                # "note": "分块分析完成，结果已严格压缩以避免上下文超限",
+                "compression_applied": True,
+                "compressed_count": compressed_count
+            }
+            
+            return json.dumps(result, ensure_ascii=False, default=str)
+            
+        except Exception as e:
+            print(f"❌ [分块分析] 整体失败: {e}")
+            return json.dumps({
+                "method": "parallel_chunk_analysis",
+                "error": str(e),
+                "success": False
+            }, ensure_ascii=False, default=str)
+    
+    @tool
+    async def summary_chunk_results_tool(chunk_analysis_results: str, query: str, summary_focus: str = "comprehensive") -> str:
+        """
+        对分块分析结果进行总结（支持大量分块，自动处理上下文限制）
+        
+        Args:
+            chunk_analysis_results: 分块分析的结果（JSON格式）
+            query: 原始查询
+            summary_focus: 总结重点 (comprehensive, key_points, detailed, concise)
+        """
+        try:
+            print(f"📋 [结果总结] 开始总结分块分析结果")
+            
+            # 解析分块分析结果
+            if isinstance(chunk_analysis_results, str):
+                try:
+                    results_data = json.loads(chunk_analysis_results)
+                except:
+                    results_data = {"chunk_analyses": [{"analysis": chunk_analysis_results}]}
+            else:
+                results_data = chunk_analysis_results
+            
+            chunk_analyses = results_data.get("chunk_analyses", [])
+            successful_analyses = [r for r in chunk_analyses if r.get("success", False)]
+            
+            if not successful_analyses:
+                return json.dumps({
+                    "method": "summary_chunk_results",
+                    "error": "没有成功的分块分析结果可供总结",
+                    "success": False
+                }, ensure_ascii=False, default=str)
+            
+            print(f"📊 [结果总结] 总结 {len(successful_analyses)} 个成功的分析结果")
+            
+            # 使用tiktoken估算token数量，避免上下文超限
+            token_encoder = tiktoken.get_encoding("cl100k_base")
+            
+            # 构建总结提示词模板
+            summary_prompts = {
+                "comprehensive": f"""请基于以下多个分块的分析结果，对查询"{query}"提供全面、详细的回答。
+
+请：
+1. 整合所有分块的关键信息
+2. 消除重复内容  
+3. 按逻辑顺序组织信息
+4. 提供具体的例证和细节
+5. 给出完整、连贯的答案
+
+各分块分析结果：""",
+                
+                "key_points": f"""请基于以下多个分块的分析结果，提取关于"{query}"的关键要点。
+
+请以要点形式总结：
+1. 主要发现（3-5个要点）
+2. 关键信息
+3. 重要细节
+4. 结论
+
+各分块分析结果：""",
+                
+                "detailed": f"""请基于以下多个分块的分析结果，对查询"{query}"提供详细深入的分析。
+
+请包括：
+1. 背景信息
+2. 详细分析
+3. 具体例证
+4. 深层含义
+5. 相关联系
+
+各分块分析结果：""",
+                
+                "concise": f"""请基于以下多个分块的分析结果，对查询"{query}"提供简洁精准的回答。
+
+请用简洁语言概括：
+1. 核心答案
+2. 主要支撑信息
+3. 关键结论
+
+各分块分析结果："""
+            }
+            
+            base_prompt = summary_prompts.get(summary_focus, summary_prompts["comprehensive"])
+            base_tokens = len(token_encoder.encode(base_prompt))
+            
+            # 计算可用于分析结果的token数（保留安全边距）
+            max_context_tokens = 120000  # 128K的安全范围
+            reserved_tokens = 8000  # 为response和其他内容预留
+            available_tokens = max_context_tokens - base_tokens - reserved_tokens
+            
+            print(f"🔍 [Token管理] 基础提示: {base_tokens} tokens, 可用空间: {available_tokens} tokens")
+            
+            # 智能选择和压缩分析结果 - 强制限制token数量
+            # 无论何种情况，都要严格控制传递给LLM的内容大小
+            
+            # 预先压缩所有分析结果
+            compressed_analyses = []
+            for analysis in successful_analyses:
+                chunk_id = analysis.get("chunk_id", "unknown")
+                analysis_content = analysis.get("analysis", "")
+                
+                # 强制限制每个分析结果的长度
+                max_analysis_length = 2000  # 每个分析结果最多2000字符
+                if len(analysis_content) > max_analysis_length:
+                    compressed_content = analysis_content[:max_analysis_length-100] + "\\n\\n[已压缩，原长度:" + str(len(analysis_content)) + "字符]"
+                else:
+                    compressed_content = analysis_content
+                
+                compressed_analyses.append({
+                    "chunk_id": chunk_id,
+                    "analysis": compressed_content,
+                    "original_length": len(analysis_content)
+                })
+            
+            print(f"🔧 [内容压缩] 已压缩 {len(compressed_analyses)} 个分析结果")
+            
+            # 分层总结策略 - 始终使用，确保不会超限
+            print(f"🔄 [分层总结] 采用强制分层总结策略")
+            
+            # 第一层：将分块分组并总结每组（严格控制组大小）
+            group_size = 2  # 减少到每组2个分块，进一步降低风险
+            group_summaries = []
+            
+            for i in range(0, len(compressed_analyses), group_size):
+                group = compressed_analyses[i:i + group_size]
+                
+                # 构建组内容，严格控制大小
+                group_items = []
+                total_group_length = 0
+                max_group_length = 4000  # 每组最多4000字符
+                
+                for analysis in group:
+                    chunk_id = analysis.get("chunk_id", "unknown")
+                    analysis_content = analysis.get("analysis", "")
+                    
+                    # 检查添加这个分析是否会超限
+                    item_text = f"\\n=== 分块 {chunk_id} ===\\n{analysis_content}"
+                    if total_group_length + len(item_text) > max_group_length:
+                        # 如果会超限，进一步裁剪
+                        remaining_space = max_group_length - total_group_length - 50
+                        if remaining_space > 100:
+                            truncated_content = analysis_content[:remaining_space] + "..."
+                            item_text = f"\\n=== 分块 {chunk_id} ===\\n{truncated_content}"
+                        else:
+                            break  # 空间不够，跳过这个分析
+                    
+                    group_items.append(item_text)
+                    total_group_length += len(item_text)
+                
+                group_text = "".join(group_items)
+                
+                # 生成组总结（使用简化提示）
+                group_prompt = f"""总结以下分析内容的核心要点（关于：{query}）：
+
+{group_text}
+
+请用简洁语言提取关键信息："""
+                
+                # 检查组提示的token数量
+                group_tokens = len(token_encoder.encode(group_prompt))
+                print(f"  📊 [组 {len(group_summaries)+1}] 提示tokens: {group_tokens}")
+                
+                if group_tokens > 15000:  # 如果组提示超过15K tokens，进一步压缩
+                    print(f"  ⚠️ [组 {len(group_summaries)+1}] 提示过长，进一步压缩")
+                    # 使用极简版本
+                    short_summaries = []
+                    for analysis in group:
+                        analysis_content = analysis.get("analysis", "")
+                        short_summary = analysis_content[:500] + "..." if len(analysis_content) > 500 else analysis_content
+                        short_summaries.append(short_summary)
+                    
+                    group_prompt = f"""总结关键信息（{query}）：
+{chr(10).join(short_summaries)}
+请简要概括："""
+                
+                try:
+                    group_response = await llm_gen.ainvoke([HumanMessage(content=group_prompt)])
+                    group_summaries.append({
+                        "group_id": len(group_summaries),
+                        "summary": group_response.content,
+                        "chunk_count": len(group)
+                    })
+                    print(f"  ✅ [组 {len(group_summaries)}] 完成，包含 {len(group)} 个分块")
+                except Exception as e:
+                    print(f"  ❌ [组总结] 失败: {e}")
+                    # 如果组总结失败，使用极简版本
+                    simplified_summary = f"组{len(group_summaries)}关键信息：" + "；".join([
+                        analysis.get("analysis", "")[:200] for analysis in group
+                    ])
+                    group_summaries.append({
+                        "group_id": len(group_summaries),
+                        "summary": simplified_summary,
+                        "chunk_count": len(group)
+                    })
+            
+            # 第二层：总结所有组总结（严格控制最终总结的大小）
+            print(f"📋 [最终总结] 准备总结 {len(group_summaries)} 个组的结果")
+            
+            # 预先压缩所有组总结
+            compressed_group_summaries = []
+            total_final_length = 0
+            max_final_length = 8000  # 最终总结输入最多8000字符
+            
+            for group_summary in group_summaries:
+                group_id = group_summary['group_id']
+                summary_content = group_summary['summary']
+                chunk_count = group_summary['chunk_count']
+                
+                # 为每个组总结分配空间
+                max_group_summary_length = max_final_length // len(group_summaries)
+                max_group_summary_length = min(max_group_summary_length, 1500)  # 每个组最多1500字符
+                
+                if len(summary_content) > max_group_summary_length:
+                    compressed_content = summary_content[:max_group_summary_length-50] + "..."
+                else:
+                    compressed_content = summary_content
+                
+                item_text = f"组{group_id}({chunk_count}块): {compressed_content}"
+                
+                if total_final_length + len(item_text) <= max_final_length:
+                    compressed_group_summaries.append(item_text)
+                    total_final_length += len(item_text)
+                else:
+                    # 如果空间不够，使用极简版本
+                    remaining_space = max_final_length - total_final_length - 20
+                    if remaining_space > 50:
+                        mini_content = summary_content[:remaining_space] + "..."
+                        compressed_group_summaries.append(f"组{group_id}: {mini_content}")
+                    break
+            
+            # 构建最终提示（使用简化的基础提示）
+            simple_base_prompt = f"""基于以下分组分析结果，回答查询"{query}"：
+
+"""
+            
+            final_summaries_text = "\\n".join(compressed_group_summaries)
+            final_prompt = f"""{simple_base_prompt}{final_summaries_text}
+
+请提供综合回答："""
+            
+            # 最后检查token数（绝对保证不超限）
+            final_tokens = len(token_encoder.encode(final_prompt))
+            print(f"🔍 [Token检查] 最终提示: {final_tokens} tokens")
+            
+            if final_tokens > 15000:  # 如果超过15K tokens，进一步强制压缩
+                print(f"🚨 [紧急压缩] 最终提示过长，执行强制压缩")
+                
+                # 使用最简版本
+                ultra_compressed = []
+                for i, group_summary in enumerate(group_summaries):
+                    summary_content = group_summary['summary']
+                    # 每个组只保留前300字符
+                    ultra_short = summary_content[:300] + "..." if len(summary_content) > 300 else summary_content
+                    ultra_compressed.append(f"{i+1}. {ultra_short}")
+                
+                final_prompt = f"""回答查询"{query}"，基于以下要点：
+
+{chr(10).join(ultra_compressed)}
+
+综合回答："""
+                
+                final_tokens = len(token_encoder.encode(final_prompt))
+                print(f"🔍 [压缩后] 最终提示: {final_tokens} tokens")
+            
+            # 确保绝对安全
+            if final_tokens > 20000:
+                print(f"🚨 [极限压缩] 仍然过长，使用极简模式")
+                # 只保留前几个组的核心信息
+                essential_info = []
+                for i, group_summary in enumerate(group_summaries[:3]):  # 只取前3组
+                    summary_content = group_summary['summary']
+                    essential = summary_content[:200]  # 每组只要200字符
+                    essential_info.append(essential)
+                
+                final_prompt = f"""关于"{query}"的核心信息：
+{chr(10).join(essential_info)}
+请简要回答："""
+            
+            print(f"🤖 [最终调用] 调用LLM，提示长度: {len(final_prompt)} 字符")
+            
+            response = await llm_gen.ainvoke([HumanMessage(content=final_prompt)])
+            
+            print(f"✅ [结果总结] 强制分层总结完成")
+            
+            result = {
+                "method": "summary_chunk_results",
+                "query": query,
+                "summary_focus": summary_focus,
+                "total_chunks_analyzed": len(successful_analyses),
+                "final_summary": response.content,
+                "processing_mode": "forced_hierarchical_summary",
+                "group_count": len(group_summaries),
+                "original_analysis_count": len(chunk_analyses),
+                "successful_analysis_count": len(successful_analyses),
+                "compression_applied": True,
+                "final_prompt_tokens": final_tokens,
+                "success": True
+            }
+            
+            return json.dumps(result, ensure_ascii=False, default=str)
+            
+        except Exception as e:
+            print(f"❌ [结果总结] 总结失败: {e}")
+            return json.dumps({
+                "method": "summary_chunk_results",
+                "error": str(e),
+                "success": False
+            }, ensure_ascii=False, default=str)
     tools = [
         # 书本管理工具（优先级最高）
         list_available_books_tool,
@@ -707,15 +1187,19 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         switch_book_tool,
         get_current_book_tool,
         
-        # === 新增的RAG检索分离工具 ===
-        # global_search_retrieve_tool,
-        # # global_search_generate_tool,
-        # local_search_retrieve_tool,
-        # local_search_generate_tool,
+        #=== 新增的RAG检索分离工具 ===
+        global_search_retrieve_tool,
+        # global_search_generate_tool,
+        local_search_retrieve_tool,
+        local_search_generate_tool,
         
-        # === 新增：独立LLM调用工具 ===
-        # llm_generate_tool,
-        # llm_analyze_tool,
+        #=== 新增：独立LLM调用工具 ===
+        llm_generate_tool,
+        llm_analyze_tool,
+        
+        #=== 新增：分块处理工具 ===
+        parallel_chunk_analysis_tool,
+        summary_chunk_results_tool,
         
         # === 原有工具 ===
         get_characters_tool,
@@ -745,29 +1229,6 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         system_status_tool,
         get_people_location_relation_tool,
     ]
-
-    # 初始化 LLM
-    # 确保你已经设置了 OPENAI_API_KEY 环境变量
-    llm = AzureChatOpenAI(
-        openai_api_version="2024-12-01-preview",
-        azure_deployment="gpt-4o",
-        model_name="gpt-4o",
-        azure_endpoint="https://tcamp.openai.azure.com/",
-        openai_api_key=api_key,
-        temperature=0.3,
-        max_tokens=2000,  # 从800增加到2000
-        streaming=True,
-        callbacks=[StreamingStdOutCallbackHandler()]
-    )
-    llm_gen = AzureChatOpenAI(
-        openai_api_version="2024-12-01-preview",
-        azure_deployment="gpt-4o",
-        model_name="gpt-4o",
-        azure_endpoint="https://tcamp.openai.azure.com/",
-        openai_api_key=api_key,
-        temperature=0.85,   # 更高创造性
-        max_tokens=2000     # 从1000增加到2000
-    )
 
 # ### RAG检索分离工具：
 # - **global_search_retrieve_tool**: 仅进行全局搜索的检索，展示GraphRAG召回的内容

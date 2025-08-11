@@ -420,6 +420,35 @@ const toolDescriptions = {
     }
 };
 
+// 追加token到消息
+function appendTokenToMessage(messageId, token) {
+    const messageElement = document.getElementById(messageId);
+    if (!messageElement) {
+        console.warn('找不到消息元素:', messageId);
+        return;
+    }
+    
+    const messageText = messageElement.querySelector('.message-text');
+    if (!messageText) {
+        console.warn('找不到消息文本元素');
+        return;
+    }
+    
+    // 如果是第一个token，先清空加载状态并初始化内容
+    if (!messageText.hasAttribute('data-streaming')) {
+        messageText.innerHTML = '';
+        messageText.setAttribute('data-streaming', 'true');
+        addThinkingStep('info', '✍️ 开始输出回答', '正在实时生成回答...');
+    }
+    
+    // 直接追加token（不进行HTML格式化，避免破坏流式输出）
+    const currentContent = messageText.textContent || '';
+    messageText.textContent = currentContent + token;
+    
+    // 自动滚动到最新内容
+    messageElement.scrollIntoView({ behavior: 'smooth', block: 'end' });
+}
+
 // 处理SSE事件
 function handleSSEEvent(eventType, data, assistantMessageId) {
     console.log('处理SSE事件:', eventType, data);
@@ -428,6 +457,12 @@ function handleSSEEvent(eventType, data, assistantMessageId) {
         case 'thinking':
             if (data.content) {
                 addThinkingStep('thinking', '🧠 深度思考', data.content);
+            }
+            break;
+            
+        case 'llm_token':
+            if (data.token && assistantMessageId) {
+                appendTokenToMessage(assistantMessageId, data.token);
             }
             break;
             
@@ -534,7 +569,7 @@ function updateAssistantMessage(messageId, data, finalResponse) {
     
     switch (data.type) {
         case 'final':
-            console.log('🎯 显示最终回答:', data.response);
+            console.log('🎯 完成流式输出:', data.response);
             
             // 检查response字段是否存在
             if (!data.response) {
@@ -543,20 +578,30 @@ function updateAssistantMessage(messageId, data, finalResponse) {
                 return;
             }
             
-            // 先显示开始输出的提示
-            addThinkingStep('info', '✍️ 开始输出回答', '正在为你生成回答...');
+            // 如果内容已经通过token流式显示，则进行格式化处理
+            if (messageText.hasAttribute('data-streaming')) {
+                // 流式输出已完成，现在格式化内容
+                const currentContent = messageText.textContent || data.response;
+                const formattedResponse = formatMessage(currentContent);
+                messageText.innerHTML = formattedResponse;
+                messageText.removeAttribute('data-streaming');
+                
+                console.log('✅ 流式输出完成，内容已格式化');
+            } else {
+                // 如果没有收到token流，使用打字机效果作为备用方案
+                console.log('🔄 使用备用打字机效果');
+                addThinkingStep('info', '✍️ 开始输出回答', '正在为你生成回答...');
+                const formattedResponse = formatMessage(data.response);
+                typewriterEffect(messageText, formattedResponse, 15).then(() => {
+                    console.log('✅ 备用打字机效果完成');
+                });
+            }
             
-            // 使用优化的打字机效果显示回答
-            const formattedResponse = formatMessage(data.response);
-            typewriterEffect(messageText, formattedResponse, 15).then(() => {
-                console.log('✅ 打字机效果完成');
-                
-                // 更新聊天记录中的助手回答
-                updateChatHistoryMessage(messageId, data.response);
-                
-                // 添加最终完成的思考步骤
-                addThinkingStep('success', '🎉 回答完成', '已为你生成了完整的回答');
-            });
+            // 更新聊天记录中的助手回答
+            updateChatHistoryMessage(messageId, data.response);
+            
+            // 添加最终完成的思考步骤
+            addThinkingStep('success', '🎉 回答完成', '已为你生成了完整的回答');
             
             // 更新书本状态
             if (data.currentBook) {

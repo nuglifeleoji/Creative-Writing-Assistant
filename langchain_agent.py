@@ -15,14 +15,14 @@ load_dotenv("./.env")
 # 优先读取 OPENAI_API_KEY，其次 AZURE_OPENAI_API_KEY，不要把密钥当作环境变量名
 api_key =os.getenv("AZURE_OPENAI_API_KEY") or ""
 
-
+import tiktoken
 from langchain.agents import tool
 from langchain.agents import create_react_agent, AgentExecutor, create_tool_calling_agent
 from langchain import hub
 from langchain_openai import ChatOpenAI,AzureChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
-from search.rag_engine import rag_engine
+from search.rag_engine import rag_engine, multi_book_manager, RAGEngine
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 import prompt_utils
 import prompt
@@ -54,32 +54,131 @@ memory = ConversationSummaryBufferMemory(
 
 
 class GraphAnalysisAgent:
-    def __init__(self):
-        self.rag_engine = rag_engine
+    def __init__(self, use_multi_book=True):
+        self.use_multi_book = use_multi_book
+        if use_multi_book:
+            self.rag_engine = multi_book_manager
+            self.current_engine = None
+        else:
+            self.rag_engine = rag_engine
+            self.current_engine = rag_engine
+        
+    def add_book(self, book_name: str, book_folder: str):
+        """添加新书本"""
+        if self.use_multi_book:
+            self.rag_engine.add_book(book_name, book_folder)
+        else:
+            print("当前使用的是单书本引擎，请设置 use_multi_book=True 来启用多书本功能")
+    
+    def switch_book(self, book_name: str):
+        """切换到指定书本"""
+        if self.use_multi_book:
+            self.rag_engine.switch_book(book_name)
+            self.current_engine = self.rag_engine.get_current_engine()
+        else:
+            print("当前使用的是单书本引擎，请设置 use_multi_book=True 来启用多书本功能")
+    
+    def list_books(self):
+        """列出所有可用的书本"""
+        if self.use_multi_book:
+            return self.rag_engine.list_books()
+        else:
+            return ["default_book"]
+    
+    def get_current_book(self):
+        """获取当前书本名称"""
+        if self.use_multi_book:
+            return self.rag_engine.get_current_book()
+        else:
+            return "default_book"
+    
+    def _get_engine(self):
+        """获取当前引擎"""
+        if self.use_multi_book:
+            if self.current_engine is None:
+                # 如果还没有选择书本，返回None让agent提示用户选择
+                return None
+            return self.current_engine
+        else:
+            return self.rag_engine
         
     async def global_search_retrieve_async(self, query: str) -> Dict[str, Any]:
         """全局搜索 - 仅检索阶段，展示RAG召回内容"""
-        return await self.rag_engine.global_search_retrieve(query)
+        engine = self._get_engine()
+        if engine is None:
+            return {
+                "method": "global_retrieve",
+                "query": query,
+                "error": "请先选择一本书本",
+                "success": False,
+                "need_book_selection": True
+            }
+        return await engine.global_search_retrieve(query)
     
     async def global_search_generate_async(self, query: str, retrieved_context: Any) -> Dict[str, Any]:
         """全局搜索 - 仅生成阶段，使用预检索的上下文"""
-        return await self.rag_engine.global_search_generate(query, retrieved_context)
+        engine = self._get_engine()
+        if engine is None:
+            return {
+                "method": "global_generate",
+                "query": query,
+                "error": "请先选择一本书本",
+                "success": False,
+                "need_book_selection": True
+            }
+        return await engine.global_search_generate(query, retrieved_context)
     
     async def global_search_full_async(self, query: str) -> Dict[str, Any]:
         """全局搜索 - 完整流程（检索+生成）"""
-        return await self.rag_engine.global_search_full(query)
+        engine = self._get_engine()
+        if engine is None:
+            return {
+                "method": "global_full",
+                "query": query,
+                "error": "请先选择一本书本",
+                "success": False,
+                "need_book_selection": True
+            }
+        return await engine.global_search_full(query)
     
     async def local_search_retrieve_async(self, query: str) -> Dict[str, Any]:
         """局部搜索 - 仅检索阶段，展示RAG召回内容"""
-        return await self.rag_engine.local_search_retrieve(query)
+        engine = self._get_engine()
+        if engine is None:
+            return {
+                "method": "local_retrieve",
+                "query": query,
+                "error": "请先选择一本书本",
+                "success": False,
+                "need_book_selection": True
+            }
+        return await engine.local_search_retrieve(query)
     
     async def local_search_generate_async(self, query: str, retrieved_context: Any) -> Dict[str, Any]:
         """局部搜索 - 仅生成阶段，使用预检索的上下文"""
-        return await self.rag_engine.local_search_generate(query, retrieved_context)
+        engine = self._get_engine()
+        if engine is None:
+            return {
+                "method": "local_generate",
+                "query": query,
+                "error": "请先选择一本书本",
+                "success": False,
+                "need_book_selection": True
+            }
+        return await engine.local_search_generate(query, retrieved_context)
     
     async def local_search_full_async(self, query: str) -> Dict[str, Any]:
         """局部搜索 - 完整流程（检索+生成）"""
-        return await self.rag_engine.local_search_full(query)
+        engine = self._get_engine()
+        if engine is None:
+            return {
+                "method": "local_full",
+                "query": query,
+                "error": "请先选择一本书本",
+                "success": False,
+                "need_book_selection": True
+            }
+        return await engine.local_search_full(query)
 
     async def get_characters_async(self) -> Dict[str, Any]:
         return await self.global_search_full_async("列出故事中的所有人物角色")
@@ -153,12 +252,6 @@ class GraphAnalysisAgent:
     {{"values":["…"],"goals":["…"],"methods":["…"],"red_lines":["…"],"decision_style":"冲动|谨慎|算计","evidence":[{{"chapter":"…","quote":"<=40字"}}]}}
     """
         return await self.global_search_full_async(q)
-    async def get_people_location_relation_async(self, people:str, location:str, relation:str) -> Dict[str, Any]:
-        q = f"""
-    分析{people}和{location}之间的关系，严格JSON：
-    {{"values":["…"],"goals":["…"],"methods":["…"],"red_lines":["…"],"decision_style":"冲动|谨慎|算计","evidence":[{{"chapter":"…","quote":"<=40字"}}]}}
-    """
-        return await self.global_search_full_async(q)
 
 # --- 第二步：创建 LangChain Agent ---
 def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentExecutor:
@@ -168,6 +261,66 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
     # 使用 @tool 装饰器，将 GraphAnalysisAgent 的方法包装成 LangChain 工具
     # 注意：这里的工具函数需要能够被 Agent 直接调用，所以我们使用闭包来传递实例
     
+    @tool
+    async def list_available_books_tool() -> str:
+        """列出所有可用的书本。如果还没有添加任何书本，会提示用户添加书本。"""
+        books = graphrag_agent_instance.list_books()
+        if not books:
+            return json.dumps({
+                "message": "还没有添加任何书本。请使用 add_book_tool 添加书本。",
+                "books": [],
+                "success": False
+            }, ensure_ascii=False)
+        
+        current_book = graphrag_agent_instance.get_current_book()
+        return json.dumps({
+            "message": f"可用的书本：{', '.join(books)}。当前选择的书本：{current_book}",
+            "books": books,
+            "current_book": current_book,
+            "success": True
+        }, ensure_ascii=False)
+    
+    @tool
+    async def add_book_tool(book_name: str, book_folder: str) -> str:
+        """添加新书本到系统中。book_name是书本的显示名称，book_folder是书本数据文件夹的路径。"""
+        try:
+            graphrag_agent_instance.add_book(book_name, book_folder)
+            return json.dumps({
+                "message": f"成功添加书本：{book_name} -> {book_folder}",
+                "success": True
+            }, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({
+                "message": f"添加书本失败：{str(e)}",
+                "success": False
+            }, ensure_ascii=False)
+    
+    @tool
+    async def switch_book_tool(book_name: str) -> str:
+        """切换到指定的书本。book_name是要切换到的书本名称。"""
+        try:
+            graphrag_agent_instance.switch_book(book_name)
+            return json.dumps({
+                "message": f"成功切换到书本：{book_name}",
+                "current_book": book_name,
+                "success": True
+            }, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({
+                "message": f"切换书本失败：{str(e)}",
+                "success": False
+            }, ensure_ascii=False)
+    
+    @tool
+    async def get_current_book_tool() -> str:
+        """获取当前选择的书本名称。"""
+        current_book = graphrag_agent_instance.get_current_book()
+        return json.dumps({
+            "message": f"当前选择的书本：{current_book}",
+            "current_book": current_book,
+            "success": True
+        }, ensure_ascii=False)
+
     # === 新增：RAG检索分离工具 ===
     @tool
     async def global_search_retrieve_tool(query: str) -> str:
@@ -548,6 +701,12 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         result = await graphrag_agent_instance.get_people_location_relation_async(people, location, relation)
         return json.dumps(result, ensure_ascii=False, default=str)
     tools = [
+        # 书本管理工具（优先级最高）
+        list_available_books_tool,
+        add_book_tool,
+        switch_book_tool,
+        get_current_book_tool,
+        
         # === 新增的RAG检索分离工具 ===
         # global_search_retrieve_tool,
         # # global_search_generate_tool,
@@ -645,9 +804,15 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
 # - **具体细节**：使用 local_search_tool 进行精确检索
 # - **创作任务**：使用 llm_generate_tool 进行创造性生成
 
-    prompt_template = f"""
-你是一个智能创作助手，专门分析《沙丘》(Dune)系列小说，可以进行信息分析和探索，通过系统性的调查来完成复杂的创作任务。
+    # 将 prompt 字符串重命名为 prompt_text，避免与 prompt 模块冲突
+    prompt_text = f"""
+你是一个智能创作助手，可以进行信息分析和探索，通过系统性的调查来完成复杂的创作任务。
 
+### 书本管理（优先级最高）：
+- **list_available_books_tool**: 列出所有可用的书本
+- **add_book_tool**: 添加新书本到系统中
+- **switch_book_tool**: 切换到指定的书本
+- **get_current_book_tool**: 获取当前选择的书本
 
 ### 历史记录
 {{chat_history}}
@@ -670,22 +835,19 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
     """
 
     prompt_obj = ChatPromptTemplate.from_messages([
-        ("system", prompt_template),
+        ("system", prompt_text),  # 使用 prompt_text 而不是 prompt
         MessagesPlaceholder(variable_name="chat_history"),
         ("user", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
-    # prompt = ChatPromptTemplate.from_messages([
-    #     ("system", prompt),
-    #     ("user", "{input}\n\n{agent_scratchpad}"),
-    # ])
-
+    # 使用 partial 来预设变量值
     final_prompt = prompt_obj.partial(
         functions=tools,
-        guidelines=prompt.build_guidelines(),
+        guidelines=prompt.build_guidelines(),  # 现在可以正确调用 prompt 模块
         requirements=prompt.build_requirements(),
-        response_format=prompt.build_response_format()
+        response_format=prompt.build_response_format(),
+        history=""  # 添加空的history变量
     )
 
     # 创建 Agent
@@ -696,80 +858,73 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
 
 # --- 主程序入口 ---
 async def main() -> None:
-    graph_agent = GraphAnalysisAgent()
+    graph_agent = GraphAnalysisAgent(use_multi_book=True)
+
+    # 自动加载所有可用的书本
+    print("📚 正在自动加载所有可用的书本...")
+    
+    # 定义要加载的书本列表
+    books_to_load = [
+        ("book4", "./book4/output"),
+        ("book5", "./book5/output"), 
+        ("book6", "./book6/output"),
+        ("tencent", "./tencent/output"),
+        ("default", "./rag/output")  # 默认的rag/output
+    ]
+    
+    loaded_books = []
+    for book_name, book_path in books_to_load:
+        try:
+            # 检查路径是否存在
+            if os.path.exists(book_path):
+                # 检查是否包含必要的文件
+                required_files = ["communities.parquet", "entities.parquet", "community_reports.parquet", "relationships.parquet", "text_units.parquet"]
+                missing_files = [f for f in required_files if not os.path.exists(os.path.join(book_path, f))]
+                
+                if not missing_files:
+                    graph_agent.add_book(book_name, book_path)
+                    loaded_books.append(book_name)
+                    print(f"✅ 成功加载书本: {book_name} -> {book_path}")
+                else:
+                    print(f"⚠️ 跳过 {book_name}: 缺少必要文件 {missing_files}")
+            else:
+                print(f"⚠️ 跳过 {book_name}: 路径不存在 {book_path}")
+        except Exception as e:
+            print(f"❌ 加载 {book_name} 失败: {e}")
+    
+    print(f"✅ 总共加载了 {len(loaded_books)} 本书: {', '.join(loaded_books)}")
+    
+    # 如果有书本加载成功，自动选择第一本
+    if loaded_books:
+        first_book = loaded_books[0]
+        graph_agent.switch_book(first_book)
+        print(f"🔄 自动切换到第一本书: {first_book}")
+    else:
+        print("⚠️ 没有加载到任何书本，请手动添加书本")
 
     # 使用这个实例创建 LangChain Agent
     agent_executor = create_graphrag_agent(graph_agent)
 
-    print("=" * 60)
-    print("🤖 《沙丘》智能分析助手已启动")
-    print("=" * 60)
-    print("📚 专精：《沙丘》(Dune)系列小说分析")
-    print("🔧 功能：人物分析、关系分析、背景知识、情节分析、创意写作")
-    print("💡 提示：输入 'help' 查看帮助，输入 'exit' 退出")
-    print("=" * 60)
-    history = []
+    print("LangChain Agent with GraphRAG (Python API) tools is ready. Type 'exit' to quit.")
     
     while True:
         user_query = input("\n请输入你的问题：")
-        # history.append({"role": "user", "content": user_query})
-        # recent_history = history[-4:]  # 只保留最近的4条历史记录
-        # history_text = ""
-        # for msg in recent_history:
-        #     prefix = "用户：" if msg["role"] == "user" else "助手："
-        #     history_text += f"{prefix}{msg['content']}\n"
         if user_query.lower() == 'exit':
             break
-        elif user_query.lower() == 'help':
-            print("\n" + "=" * 60)
-            print("📖 《沙丘》智能分析助手 - 使用帮助")
-            print("=" * 60)
-            print("🎯 主要功能：")
-            print("  • 人物分析：查询角色背景、性格、动机")
-            print("  • 关系分析：分析人物之间的关系")
-            print("  • 背景知识：了解世界观、设定、历史")
-            print("  • 情节分析：分析故事发展、冲突、转折")
-            print("  • 创意写作：基于原著进行续写、对话生成")
-            print("\n💬 示例问题：")
-            print("  • '保罗·阿特雷德斯的性格特点是什么？'")
-            print("  • '保罗和杰西卡的关系如何？'")
-            print("  • '香料在沙丘世界中的作用是什么？'")
-            print("  • 'Bene Gesserit姐妹会的目标是什么？'")
-            print("  • '请分析沙丘的主要冲突'")
-            print("\n🔧 系统状态：")
-            print("  • 输入 'status' 查看系统状态")
-            print("  • 输入 'exit' 退出程序")
-            print("=" * 60)
-            continue
-        elif user_query.lower() == 'status':
-            print("\n🔧 正在获取系统状态...")
-            try:
-                status_response = await agent_executor.ainvoke({"input": "请调用system_status_tool获取系统状态信息"})
-                if status_response and status_response.get("output"):
-                    print(status_response.get("output"))
-                else:
-                    print("❌ 无法获取系统状态")
-            except Exception as e:
-                print(f"❌ 获取系统状态失败：{e}")
-            continue
-        
+
         try:
-            print(f"\n🤖 [Agent处理] 正在处理您的问题...")
             # 使用异步调用，匹配异步工具
-            response = await agent_executor.ainvoke({"input": user_query})
+            response = await agent_executor.ainvoke({
+                "input": user_query
+            })
             
-            # 显示Agent的回答
-            if response and response.get("output"):
-                print(f"\n📝 [Agent回答]")
-                print("=" * 50)
-                print(response.get("output"))
-                print("=" * 50)
-                history.append({"role": "assistant", "content": response.get("output")})
-            else:
-                print("❌ [错误] Agent没有返回有效回答")
-                
+            # 恢复输出显示
+            print("\n--- Agent 回答 ---")
+            print(response.get("output"))
+            print("--------------------\n")
+            
         except Exception as e:
-            print(f"❌ [错误] 发生错误：{e}")
+            print(f"发生错误：{e}")
             break
 
 

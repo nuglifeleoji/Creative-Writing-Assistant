@@ -16,7 +16,7 @@ models:
     retry_strategy: native
     max_retries: 10
     tokens_per_minute: 120000              # set to null to disable rate limiting
-    requests_per_minute: 120            # set to null to disable rate limiting
+    requests_per_minute: 60            # set to null to disable rate limiting
   default_embedding_model:
     type: azure_openai_embedding # or azure_openai_embedding
     api_base: https://tcamp.openai.azure.com
@@ -33,8 +33,8 @@ models:
     async_mode: threaded # or asyncio
     retry_strategy: native
     max_retries: 10
-    tokens_per_minute: null              # set to null to disable rate limiting or auto for dynamic
-    requests_per_minute: null            # set to null to disable rate limiting or auto for dynamic
+    tokens_per_minute: 120000              # set to null to disable rate limiting or auto for dynamic
+    requests_per_minute: 30            # set to null to disable rate limiting or auto for dynamic
 
 ### Input settings ###
 

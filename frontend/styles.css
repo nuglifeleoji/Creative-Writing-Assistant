@@ -280,8 +280,100 @@ body {
 }
 
 .message-text p {
-    margin-bottom: 15px;
-    line-height: 1.6;
+    margin-bottom: 10px;
+    line-height: 1.5;
+}
+
+.intro-section p {
+    margin-bottom: 8px;
+    margin-top: 5px;
+}
+
+/* 介绍部分样式 */
+.intro-section {
+    margin: 15px 0;
+    padding: 8px 0;
+}
+
+.intro-section h4 {
+    color: #2c3e50;
+    margin-bottom: 8px;
+    margin-top: 5px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.feature-list, .example-list {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0;
+}
+
+.feature-list li, .example-list li {
+    padding: 6px 0;
+    border-left: 3px solid #3498db;
+    padding-left: 15px;
+    margin: 5px 0;
+    background: linear-gradient(90deg, rgba(52, 152, 219, 0.1) 0%, transparent 100%);
+    border-radius: 0 8px 8px 0;
+}
+
+.example-list li {
+    border-left-color: #e74c3c;
+    background: linear-gradient(90deg, rgba(231, 76, 60, 0.1) 0%, transparent 100%);
+    font-style: italic;
+    color: #555;
+}
+
+.feature-list li strong {
+    color: #2980b9;
+}
+
+/* 技术特色样式 */
+.tech-highlight {
+    background: linear-gradient(135deg, rgba(155, 89, 182, 0.1) 0%, rgba(142, 68, 173, 0.1) 100%);
+    border-radius: 10px;
+    padding: 12px;
+    margin: 8px 0;
+    border: 1px solid rgba(155, 89, 182, 0.2);
+}
+
+.tech-list {
+    list-style: none;
+    padding: 0;
+    margin: 6px 0;
+}
+
+.tech-list li {
+    padding: 5px 0;
+    border-left: 3px solid #9b59b6;
+    padding-left: 12px;
+    margin: 4px 0;
+    background: linear-gradient(90deg, rgba(155, 89, 182, 0.15) 0%, transparent 100%);
+    border-radius: 0 6px 6px 0;
+    color: #333;
+    font-weight: 500;
+}
+
+/* 使用技巧样式 */
+.tips-list {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0;
+}
+
+.tips-list li {
+    padding: 6px 0;
+    border-left: 3px solid #f39c12;
+    padding-left: 15px;
+    margin: 5px 0;
+    background: linear-gradient(90deg, rgba(243, 156, 18, 0.1) 0%, transparent 100%);
+    border-radius: 0 8px 8px 0;
+    color: #333;
+}
+
+.tips-list li strong {
+    color: #e67e22;
 }
 
 .quick-actions {
@@ -395,6 +487,19 @@ body {
 .btn-danger:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
+}
+
+.btn-info {
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 16px;
+}
+
+.btn-info:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(23, 162, 184, 0.4);
 }
 
 .btn-secondary {

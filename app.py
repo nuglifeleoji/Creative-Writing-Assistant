@@ -163,11 +163,9 @@ def initialize_agent():
         
         print(f"✅ 总共加载了 {len(loaded_books)} 本书: {', '.join(loaded_books)}")
         
-        # 如果有书本加载成功，自动选择第一本
+        # 不自动选择书本，让用户主动选择
         if loaded_books:
-            first_book = loaded_books[0]
-            graph_agent_instance.switch_book(first_book)
-            print(f"🔄 自动切换到第一本书: {first_book}")
+            print(f"📚 已加载书本，等待用户选择: {', '.join(loaded_books)}")
         else:
             print("⚠️ 没有加载到任何书本，请手动添加书本")
         

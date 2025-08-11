@@ -308,6 +308,7 @@ async function sendMessage() {
         const decoder = new TextDecoder();
         let buffer = '';
         let finalResponse = null;
+        let currentEvent = null;  // 移到这里，在整个流处理过程中保持状态
         
         while (true) {
             const { done, value } = await reader.read();
@@ -323,10 +324,8 @@ async function sendMessage() {
             const lines = buffer.split('\n');
             buffer = lines.pop();
             
-            let currentEvent = null;
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
-                console.log('🔍 处理行:', i, '内容:', JSON.stringify(line));
                 
                 if (line.startsWith('event: ')) {
                     currentEvent = line.slice(7);
@@ -352,7 +351,6 @@ async function sendMessage() {
                         // 根据事件类型处理
                         if (currentEvent === 'final') {
                             console.log('🎯 前端收到final事件:', parsed);
-                            console.log('🔍 final事件数据结构:', JSON.stringify(parsed, null, 2));
                             finalResponse = parsed;
                             updateAssistantMessage(assistantMessageId, { type: 'final', ...parsed }, finalResponse);
                         } else if (currentEvent === 'error') {
@@ -537,7 +535,6 @@ function updateAssistantMessage(messageId, data, finalResponse) {
     switch (data.type) {
         case 'final':
             console.log('🎯 显示最终回答:', data.response);
-            console.log('🔍 final数据完整结构:', JSON.stringify(data, null, 2));
             
             // 检查response字段是否存在
             if (!data.response) {
@@ -717,12 +714,22 @@ async function switchBook(bookName) {
 function updateCurrentBook(bookName) {
     currentBook = bookName;
     if (elements.currentBookName) {
-        elements.currentBookName.textContent = bookName || '未选择';
+        elements.currentBookName.textContent = bookName || '请选择书本';
+        // 如果没有选择书本，使用不同的样式提示
+        if (!bookName) {
+            elements.currentBookName.style.color = '#ff6b6b';
+            elements.currentBookName.style.fontStyle = 'italic';
+        } else {
+            elements.currentBookName.style.color = '';
+            elements.currentBookName.style.fontStyle = '';
+        }
     }
     
     // 保存到localStorage
     if (bookName) {
         localStorage.setItem('currentBook', bookName);
+    } else {
+        localStorage.removeItem('currentBook');
     }
 }
 
@@ -810,17 +817,127 @@ function clearChat() {
         // 重新添加欢迎消息
         addMessage('assistant', `
             <h3>🤖 欢迎使用智能创作助手！</h3>
-            <p>我可以帮助你进行文本分析、创作和探索。请先选择一个书本，然后开始你的创作之旅。</p>
-            <div class="quick-actions">
-                <button class="quick-action-btn" onclick="listBooks()">
-                    <i class="fas fa-list"></i> 查看可用书本
-                </button>
-                <button class="quick-action-btn" onclick="showAddBookModal()">
-                    <i class="fas fa-plus"></i> 添加新书本
-                </button>
+            
+            <div class="intro-section">
+                <h4>✨ 系统功能介绍</h4>
+                <ul class="feature-list">
+                    <li><strong>📖 深度文本分析：</strong>基于GraphRAG技术，深入理解文本内容、人物关系和情节结构</li>
+                    <li><strong>🔍 智能问答：</strong>针对书籍内容进行精准问答，获取角色信息、情节分析等</li>
+                    <li><strong>🎭 角色探索：</strong>深入了解书中人物的性格、关系网络和发展轨迹</li>
+                    <li><strong>📝 创作辅助：</strong>基于原作风格和内容进行创作建议和灵感启发</li>
+                    <li><strong>🔗 关联分析：</strong>发现文本中的隐藏联系和深层含义</li>
+                </ul>
+            </div>
+
+            <div class="intro-section">
+                <h4>⚡ 技术特色</h4>
+                <div class="tech-highlight">
+                    <p>本系统采用 <strong>GraphRAG</strong> (图增强检索生成) 技术，将文本转换为知识图谱，能够：</p>
+                    <ul class="tech-list">
+                        <li>🧠 理解复杂的人物关系网络</li>
+                        <li>🔗 发现跨章节的情节关联</li>
+                        <li>📊 提供基于图结构的深度分析</li>
+                        <li>🎯 实现精准的上下文理解</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="intro-section">
+                <h4>🚀 如何开始</h4>
+                <p><strong>第一步：</strong>从下方选择一本书籍作为分析对象</p>
+                <p><strong>第二步：</strong>开始提问！例如：</p>
+                <ul class="example-list">
+                    <li>"这本书的主要人物有哪些？"</li>
+                    <li>"分析一下主人公的性格特点"</li>
+                    <li>"书中的核心冲突是什么？"</li>
+                    <li>"帮我总结一下主要情节"</li>
+                </ul>
+            </div>
+
+            <div class="intro-section">
+                <p><strong>📚 请选择一个书本开始你的智能分析之旅：</strong></p>
+                <div class="quick-actions">
+                    <button class="quick-action-btn" onclick="listBooks()">
+                        <i class="fas fa-list"></i> 查看可用书本
+                    </button>
+                    <button class="quick-action-btn" onclick="showAddBookModal()">
+                        <i class="fas fa-plus"></i> 添加新书本
+                    </button>
+                </div>
             </div>
         `);
     }
+}
+
+// 显示系统介绍
+function showSystemInfo() {
+    console.log('📋 显示系统介绍');
+    
+    const systemIntroMessage = `
+        <h3>🤖 智能创作助手 - 系统介绍</h3>
+        
+        <div class="intro-section">
+            <h4>✨ 系统功能介绍</h4>
+            <ul class="feature-list">
+                <li><strong>📖 深度文本分析：</strong>基于GraphRAG技术，深入理解文本内容、人物关系和情节结构</li>
+                <li><strong>🔍 智能问答：</strong>针对书籍内容进行精准问答，获取角色信息、情节分析等</li>
+                <li><strong>🎭 角色探索：</strong>深入了解书中人物的性格、关系网络和发展轨迹</li>
+                <li><strong>📝 创作辅助：</strong>基于原作风格和内容进行创作建议和灵感启发</li>
+                <li><strong>🔗 关联分析：</strong>发现文本中的隐藏联系和深层含义</li>
+            </ul>
+        </div>
+
+        <div class="intro-section">
+            <h4>⚡ 技术特色</h4>
+            <div class="tech-highlight">
+                <p>本系统采用 <strong>GraphRAG</strong> (图增强检索生成) 技术，将文本转换为知识图谱，能够：</p>
+                <ul class="tech-list">
+                    <li>🧠 理解复杂的人物关系网络</li>
+                    <li>🔗 发现跨章节的情节关联</li>
+                    <li>📊 提供基于图结构的深度分析</li>
+                    <li>🎯 实现精准的上下文理解</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="intro-section">
+            <h4>🚀 使用指南</h4>
+            <p><strong>第一步：</strong>选择一本书籍作为分析对象</p>
+            <p><strong>第二步：</strong>开始提问！例如：</p>
+            <ul class="example-list">
+                <li>"这本书的主要人物有哪些？"</li>
+                <li>"分析一下主人公的性格特点"</li>
+                <li>"书中的核心冲突是什么？"</li>
+                <li>"帮我总结一下主要情节"</li>
+                <li>"XX和XX之间的关系如何？"</li>
+                <li>"这个情节有什么深层含义？"</li>
+            </ul>
+        </div>
+
+        <div class="intro-section">
+            <h4>💡 使用技巧</h4>
+            <ul class="tips-list">
+                <li><strong>🎯 具体提问：</strong>越具体的问题，越能得到精准的答案</li>
+                <li><strong>🔄 多角度探索：</strong>可以从不同角度分析同一个话题</li>
+                <li><strong>📚 切换书籍：</strong>随时可以切换到其他书籍进行分析</li>
+                <li><strong>🛑 随时停止：</strong>可以使用停止按钮中断AI回复</li>
+            </ul>
+        </div>
+
+        <div class="intro-section">
+            <p><strong>📚 当前可用书籍：</strong></p>
+            <div class="quick-actions">
+                <button class="quick-action-btn" onclick="listBooks()">
+                    <i class="fas fa-list"></i> 查看所有书籍
+                </button>
+                <button class="quick-action-btn" onclick="showAddBookModal()">
+                    <i class="fas fa-plus"></i> 添加新书籍
+                </button>
+            </div>
+        </div>
+    `;
+    
+    addMessage('assistant', systemIntroMessage);
 }
 
 // 导出聊天记录
@@ -1060,6 +1177,11 @@ function initializeEventListeners() {
         elements.exportChatBtn.addEventListener('click', exportChat);
     }
     
+    // 系统介绍
+    if (elements.infoBtn) {
+        elements.infoBtn.addEventListener('click', showSystemInfo);
+    }
+    
     // 设置变化
     const autoSaveCheckbox = document.getElementById('autoSave');
     if (autoSaveCheckbox) {
@@ -1092,6 +1214,7 @@ document.addEventListener('DOMContentLoaded', function() {
             currentBookName: document.getElementById('currentBookName'),
             clearChatBtn: document.getElementById('clearChatBtn'),
             exportChatBtn: document.getElementById('exportChatBtn'),
+            infoBtn: document.getElementById('infoBtn'),
             toolBtns: document.querySelectorAll('.tool-btn'),
             thinkingProcess: document.getElementById('thinkingProcess'),
             thinkingSteps: document.getElementById('thinkingSteps')
@@ -1122,12 +1245,9 @@ document.addEventListener('DOMContentLoaded', function() {
             listBooks();
         }, 100);
         
-        // 从localStorage恢复当前书本
-        const savedBook = localStorage.getItem('currentBook');
-        if (savedBook) {
-            console.log('📖 恢复当前书本:', savedBook);
-            updateCurrentBook(savedBook);
-        }
+        // 不自动恢复书本选择，让用户主动选择
+        updateCurrentBook(null);
+        console.log('📚 等待用户选择书本');
         
         // 恢复自动保存设置
         const autoSave = localStorage.getItem('autoSave');

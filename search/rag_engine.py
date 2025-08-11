@@ -259,14 +259,14 @@ class RAGEngine:
         truncated_tokens = tokens[:max_tokens]
         return self.token_encoder.decode(truncated_tokens)
     
-    def _chunk_text(self, text: str, max_tokens_per_chunk: int = 15000, overlap_tokens: int = 500) -> List[Dict[str, Any]]:
+    def _chunk_text(self, text: str, max_tokens_per_chunk: int = 8000, overlap_tokens: int = 500) -> List[Dict[str, Any]]:
         """
-        将长文本分块，用于并行处理（大块优化版本，减少API调用次数）
+        将长文本分块，用于并行处理（智能分块版本，确保每个分块都在LLM处理范围内）
         
         Args:
             text: 要分块的文本
-            max_tokens_per_chunk: 每个分块的最大token数（大幅增加到15000以减少分块数量）
-            overlap_tokens: 分块之间的重叠token数（增加到500）
+            max_tokens_per_chunk: 每个分块的最大token数（8000，为提示词留出空间）
+            overlap_tokens: 分块之间的重叠token数
             
         Returns:
             分块列表，每个分块包含文本、位置信息等
@@ -286,26 +286,20 @@ class RAGEngine:
                 "end_token": total_tokens,
                 "total_tokens": total_tokens,
                 "chunk_tokens": total_tokens,
-                "is_complete": True
+                "is_complete": True,
+                "safe_for_llm": True
             }]
         
         chunks = []
         chunk_id = 0
         start = 0
         
-        # 大幅减少最大分块数量以减少API调用次数
-        max_chunks = 10  # 从8减少到4，最多4个API调用
-        min_chunk_size = total_tokens // max_chunks if total_tokens > max_tokens_per_chunk * max_chunks else max_tokens_per_chunk
+        # 智能分块：确保每个分块都能被LLM处理
+        # 考虑提示词开销（约2000-3000 tokens）+ 分块内容（8000 tokens）= 总共约11000 tokens
+        # 这样可以安全地在大部分LLM上运行
         
-        while start < total_tokens and len(chunks) < max_chunks:
-            if len(chunks) == max_chunks - 1:
-                # 最后一个分块包含所有剩余内容
-                end = total_tokens
-            else:
-                end = min(start + max_tokens_per_chunk, total_tokens)
-                # 确保分块不会太小
-                if total_tokens - end < min_chunk_size and end < total_tokens:
-                    end = total_tokens
+        while start < total_tokens:
+            end = min(start + max_tokens_per_chunk, total_tokens)
             
             # 提取当前分块的token
             chunk_tokens = tokens[start:end]
@@ -318,7 +312,8 @@ class RAGEngine:
                 "end_token": end,
                 "total_tokens": total_tokens,
                 "chunk_tokens": len(chunk_tokens),
-                "is_complete": (len(chunks) == 1 and end >= total_tokens)
+                "is_complete": (len(chunks) == 1 and end >= total_tokens),
+                "safe_for_llm": True  # 标记这个分块是LLM安全的
             })
             
             chunk_id += 1
@@ -328,7 +323,7 @@ class RAGEngine:
                 break
             start = end - overlap_tokens
         
-        print(f"📊 [大块优化] 原始 {total_tokens} tokens 分为 {len(chunks)} 个大分块（每块最多 {max_tokens_per_chunk} tokens，限制最多 {max_chunks} 个分块以减少API调用）")
+        print(f"📊 [智能分块] 原始 {total_tokens} tokens 分为 {len(chunks)} 个安全分块（每块最多 {max_tokens_per_chunk} tokens，确保LLM可处理）")
         return chunks
     
     async def global_search_retrieve(self, query: str) -> Dict[str, Any]:
@@ -377,7 +372,7 @@ class RAGEngine:
                 },
                 "context_ready": True,
                 "success": True,
-                "note": "检索完成，请使用parallel_chunk_analysis_tool进行分析"
+                "note": "检索完成"
             }
         except Exception as e:
             print(f"❌ [RAG检索] 全局检索失败: {e}")
@@ -417,7 +412,7 @@ class RAGEngine:
             }
     
     async def global_search_full(self, query: str) -> Dict[str, Any]:
-        """全局搜索 - 完整流程（检索+生成）"""
+        """全局搜索 - 完整流程（检索+分块并行分析+综合）"""
         try:
             print(f"🚀 [完整流程] 开始全局搜索: {query}")
             
@@ -426,22 +421,134 @@ class RAGEngine:
             if not retrieve_result['success']:
                 return retrieve_result
             
-            # 2. 返回检索结果，让agent决定如何处理
-            print(f"✅ [完整流程] 全局检索完成，等待agent处理")
-            print(f"🤖 [Agent调用] 正在使用Agent调用LLM生成回答...")
+            # 2. 获取检索到的内容和分块
+            retrieved_context = retrieve_result['retrieved_context']
+            full_text = retrieved_context['full_text']
+            chunks = retrieved_context['chunks']
+            
+            print(f"📊 [分块处理] 开始对 {len(chunks)} 个分块进行并行LLM分析")
+            
+            # 3. 对每个分块并行调用LLM进行分析
+            async def analyze_chunk(chunk_info):
+                chunk_id = chunk_info['chunk_id']
+                chunk_text = chunk_info['text']
+                chunk_tokens = chunk_info.get('chunk_tokens', 0)
+                
+                print(f"  📝 [分块 {chunk_id}] 正在分析 ({chunk_tokens} tokens)")
+                
+                # 构建分析提示（优化：更简洁聚焦）
+                analysis_prompt = f"""请基于以下内容回答用户问题，提取关键信息：
+
+用户问题：{query}
+
+内容片段 [{chunk_id + 1}]:
+{chunk_text}
+
+要求：
+- 直接回答用户问题的相关部分
+- 如果内容不相关，说明"此片段无相关信息"  
+- 尽可能详细，逻辑严密"""
+                
+                try:
+                    # 检查提示长度，避免token超限
+                    prompt_tokens = len(self.token_encoder.encode(analysis_prompt))
+                    if prompt_tokens > 1000000:  # 降低限制到10K，为响应留空间
+                        print(f"    ⚠️ [分块 {chunk_id}] 内容过长 ({prompt_tokens} tokens)，进行压缩")
+                        max_chunk_chars = 600000
+                        if len(chunk_text) > max_chunk_chars:
+                            compressed_text = chunk_text[:max_chunk_chars] + "\\n\\n[内容已压缩以适配LLM限制]"
+                            analysis_prompt = f"""请基于以下内容回答用户问题，提取关键信息：
+
+用户问题：{query}
+
+内容片段 [{chunk_id + 1}] (已压缩):
+{compressed_text}
+
+要求：
+- 直接回答用户问题的相关部分
+- 如果内容不相关，说明"此片段无相关信息"  
+- 简洁准确，突出重点"""
+                    
+                    # 调用GraphRAG的chat_model进行分析
+                    response = await self.chat_model.achat(analysis_prompt)
+
+                    print(f"    ✅ [分块 {chunk_id}] 分析完成")
+                    
+                    return {
+                        "chunk_id": chunk_id,
+                        "analysis": response,
+                        "success": True,
+                        "chunk_tokens": chunk_tokens
+                    }
+                    
+                except Exception as e:
+                    print(f"    ❌ [分块 {chunk_id}] 分析失败: {e}")
+                    return {
+                        "chunk_id": chunk_id,
+                        "analysis": f"分析失败: {str(e)}",
+                        "success": False,
+                        "error": str(e),
+                        "chunk_tokens": chunk_tokens
+                    }
+            
+            # 4. 并行处理所有分块（限制并发数避免API限制）
+            import asyncio
+            semaphore = asyncio.Semaphore(15)  # 限制最多3个并发
+            
+            async def limited_analyze(chunk):
+                async with semaphore:
+                    result = await analyze_chunk(chunk)
+                    # 添加小延迟避免速率限制
+                    return result
+            
+            chunk_results = await asyncio.gather(*[limited_analyze(chunk) for chunk in chunks])
+            
+            # 5. 统计和整理结果
+            successful_chunks = [r for r in chunk_results if r.get("success", False)]
+            failed_chunks = [r for r in chunk_results if not r.get("success", False)]
+            
+            print(f"📊 [分块分析] 完成：{len(successful_chunks)}/{len(chunks)} 个分块成功")
+            
+            # 6. 将所有成功的分析结果综合成一个完整的上下文
+            comprehensive_analysis = []
+            for result in successful_chunks:
+                chunk_id = result['chunk_id']
+                analysis = result['analysis']
+                comprehensive_analysis.append(f"=== 分块 {chunk_id} 分析结果 ===\\n{analysis}\\n")
+            
+            # 7. 创建综合上下文
+            final_context = f"""基于GraphRAG全局搜索和分块分析，以下是关于"{query}"的综合信息：
+
+{"".join(comprehensive_analysis)}
+
+=== 综合信息总结 ===
+以上是基于 {len(successful_chunks)} 个数据分块的详细分析结果。每个分块都经过了独立的LLM分析，确保信息的全面性和准确性。
+
+原始检索信息：
+- 总token数：{retrieved_context['original_tokens']}
+- 分块数量：{len(chunks)}
+- 成功分析：{len(successful_chunks)}个分块
+- 失败分析：{len(failed_chunks)}个分块"""
+            
+            print(f"✅ [完整流程] 全局搜索和分块分析完成，生成综合上下文")
             
             return {
-                "method": "global_full",
+                "method": "global_full_with_parallel_analysis",
                 "query": query,
-                "retrieved_context": retrieve_result['retrieved_context'],
+                "comprehensive_context": final_context,
+                "total_chunks": len(chunks),
+                "successful_chunks": len(successful_chunks),
+                "failed_chunks": len(failed_chunks),
+                "chunk_details": chunk_results,
                 "context_ready": True,
                 "success": True,
-                "note": "检索完成，请使用llm_generate_tool进行生成"
+                "note": f"已完成分块并行分析，{len(successful_chunks)}/{len(chunks)} 个分块成功。Agent可直接使用comprehensive_context进行最终回答。"
             }
+            
         except Exception as e:
             print(f"❌ [完整流程] 全局搜索失败: {e}")
             return {
-                "method": "global_full",
+                "method": "global_full_with_parallel_analysis",
                 "query": query,
                 "error": str(e),
                 "success": False
@@ -533,7 +640,7 @@ class RAGEngine:
             }
     
     async def local_search_full(self, query: str) -> Dict[str, Any]:
-        """局部搜索 - 完整流程（检索+生成）"""
+        """局部搜索 - 完整流程（检索+分块并行分析+综合）"""
         try:
             print(f"🚀 [完整流程] 开始局部搜索: {query}")
             
@@ -542,22 +649,137 @@ class RAGEngine:
             if not retrieve_result['success']:
                 return retrieve_result
             
-            # 2. 返回检索结果，让agent决定如何处理
-            print(f"✅ [完整流程] 局部检索完成，等待agent处理")
-            print(f"🤖 [Agent调用] 正在使用Agent调用LLM生成回答...")
+            # 2. 获取检索到的内容和分块
+            retrieved_context = retrieve_result['retrieved_context']
+            full_text = retrieved_context['full_text']
+            chunks = retrieved_context['chunks']
+            
+            print(f"📊 [分块处理] 开始对 {len(chunks)} 个分块进行并行LLM分析")
+            
+            # 3. 对每个分块并行调用LLM进行分析
+            async def analyze_chunk(chunk_info):
+                chunk_id = chunk_info['chunk_id']
+                chunk_text = chunk_info['text']
+                chunk_tokens = chunk_info.get('chunk_tokens', 0)
+                
+                print(f"  📝 [分块 {chunk_id}] 正在分析 ({chunk_tokens} tokens)")
+                
+                # 构建分析提示（局部搜索：聚焦具体细节）
+                analysis_prompt = f"""请基于以下内容回答用户问题，专注于具体细节：
+
+用户问题：{query}
+
+内容片段 [{chunk_id + 1}]:
+{chunk_text}
+
+要求：
+- 重点提取具体事实、数据、人物关系
+- 引用关键文本段落作为证据
+- 如果内容不相关，说明"此片段无相关信息"
+- 简洁准确，突出关键细节"""
+                
+                try:
+                    # 检查提示长度，避免token超限
+                    prompt_tokens = len(self.token_encoder.encode(analysis_prompt))
+                    if prompt_tokens > 10000:  # 降低限制到10K，为响应留空间
+                        print(f"    ⚠️ [分块 {chunk_id}] 内容过长 ({prompt_tokens} tokens)，进行压缩")
+                        max_chunk_chars = 6000
+                        if len(chunk_text) > max_chunk_chars:
+                            compressed_text = chunk_text[:max_chunk_chars] + "\\n\\n[内容已压缩以适配LLM限制]"
+                            analysis_prompt = f"""请基于以下内容回答用户问题，专注于具体细节：
+
+用户问题：{query}
+
+内容片段 [{chunk_id + 1}] (已压缩):
+{compressed_text}
+
+要求：
+- 重点提取具体事实、数据、人物关系
+- 引用关键文本段落作为证据
+- 如果内容不相关，说明"此片段无相关信息"
+- 简洁准确，突出关键细节"""
+                    
+                    # 调用GraphRAG的chat_model进行分析
+                    response = await self.chat_model.achat(analysis_prompt)
+                    
+                    print(f"    ✅ [分块 {chunk_id}] 分析完成")
+                    
+                    return {
+                        "chunk_id": chunk_id,
+                        "analysis": response,
+                        "success": True,
+                        "chunk_tokens": chunk_tokens
+                    }
+                    
+                except Exception as e:
+                    print(f"    ❌ [分块 {chunk_id}] 分析失败: {e}")
+                    return {
+                        "chunk_id": chunk_id,
+                        "analysis": f"分析失败: {str(e)}",
+                        "success": False,
+                        "error": str(e),
+                        "chunk_tokens": chunk_tokens
+                    }
+            
+            # 4. 并行处理所有分块（限制并发数避免API限制）
+            import asyncio
+            semaphore = asyncio.Semaphore(3)  # 限制最多3个并发
+            
+            async def limited_analyze(chunk):
+                async with semaphore:
+                    result = await analyze_chunk(chunk)
+                    # 添加小延迟避免速率限制
+                    await asyncio.sleep(0.1)
+                    return result
+            
+            chunk_results = await asyncio.gather(*[limited_analyze(chunk) for chunk in chunks])
+            
+            # 5. 统计和整理结果
+            successful_chunks = [r for r in chunk_results if r.get("success", False)]
+            failed_chunks = [r for r in chunk_results if not r.get("success", False)]
+            
+            print(f"📊 [分块分析] 完成：{len(successful_chunks)}/{len(chunks)} 个分块成功")
+            
+            # 6. 将所有成功的分析结果综合成一个完整的上下文
+            comprehensive_analysis = []
+            for result in successful_chunks:
+                chunk_id = result['chunk_id']
+                analysis = result['analysis']
+                comprehensive_analysis.append(f"=== 分块 {chunk_id} 分析结果 ===\\n{analysis}\\n")
+            
+            # 7. 创建综合上下文
+            final_context = f"""基于GraphRAG局部搜索和分块分析，以下是关于"{query}"的综合信息：
+
+{"".join(comprehensive_analysis)}
+
+=== 综合信息总结 ===
+以上是基于 {len(successful_chunks)} 个数据分块的详细局部分析结果。每个分块都经过了独立的LLM分析，重点关注具体细节和精确信息。
+
+原始检索信息：
+- 总token数：{retrieved_context['original_tokens']}
+- 分块数量：{len(chunks)}
+- 成功分析：{len(successful_chunks)}个分块
+- 失败分析：{len(failed_chunks)}个分块"""
+            
+            print(f"✅ [完整流程] 局部搜索和分块分析完成，生成综合上下文")
             
             return {
-                "method": "local_full",
+                "method": "local_full_with_parallel_analysis",
                 "query": query,
-                "retrieved_context": retrieve_result['retrieved_context'],
+                "comprehensive_context": final_context,
+                "total_chunks": len(chunks),
+                "successful_chunks": len(successful_chunks),
+                "failed_chunks": len(failed_chunks),
+                "chunk_details": chunk_results,
                 "context_ready": True,
                 "success": True,
-                "note": "检索完成，请使用llm_generate_tool进行生成"
+                "note": f"已完成分块并行分析，{len(successful_chunks)}/{len(chunks)} 个分块成功。Agent可直接使用comprehensive_context进行最终回答。"
             }
+            
         except Exception as e:
             print(f"❌ [完整流程] 局部搜索失败: {e}")
             return {
-                "method": "local_full",
+                "method": "local_full_with_parallel_analysis",
                 "query": query,
                 "error": str(e),
                 "success": False

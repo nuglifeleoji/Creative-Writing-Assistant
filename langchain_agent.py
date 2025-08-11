@@ -196,7 +196,7 @@ class GraphAnalysisAgent:
         return await self.global_search_full_async("获取故事的世界观和基本设定")
 
     async def get_character_profile_async(self, character_name: str) -> Dict[str, Any]:
-        return await self.local_search_full_async(f"获取{character_name}的详细信息")
+        return await self.global_search_full_async(f"获取{character_name}的详细信息")
     
     async def get_significant_event_async(self, event_name:str) -> Dict[str, Any]:
         return await self.global_search_full_async(f"获取事件{event_name}的详细信息")

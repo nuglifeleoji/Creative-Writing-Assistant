@@ -67,14 +67,34 @@ class RAGEngine:
             requests_per_minute=100,
             encoding_model="cl100k_base",
         )
+
+
         
+        # self.embedding_config = LanguageModelConfig(
+        #     api_key=self.embedding_key,
+        #     type=ModelType.OpenAIEmbedding,
+        #     api_base="https://open.bigmodel.cn/api/paas/v4",
+        #     model="embedding-3",
+        #     deployment_name="embedding-3",
+        #     auth_type="api_key",
+        #     max_retries=20,
+        #     tokens_per_minute=120000000,
+        #     requests_per_minute=100,
+        #     encoding_model="cl100k_base",
+        # )
+
         self.embedding_config = LanguageModelConfig(
-            api_key=self.embedding_key,
-            type=ModelType.OpenAIEmbedding,
-            api_base="https://open.bigmodel.cn/api/paas/v4",
-            model="embedding-3",
-            deployment_name="embedding-3",
+                        type=ModelType.AzureOpenAIChat,
+            api_base="https://tcamp.openai.azure.com/",
+            api_version="2023-05-15",
             auth_type="api_key",
+            api_key=self.api_key,
+            model="text-embedding-ada-002",
+            deployment_name="text-embedding-ada-002",
+            model_supports_json=True,
+            concurrent_requests=25,
+            async_mode="threaded",
+            retry_strategy="native",
             max_retries=20,
             tokens_per_minute=120000000,
             requests_per_minute=100,
@@ -143,7 +163,7 @@ class RAGEngine:
             token_encoder=self.token_encoder,
         )
         
-        # 大幅减少max_tokens以避免上下文超限
+        # 大幅减少max_tokens以避免上下文超限，优化API调用效率
         self.global_context_params = {
             "use_community_summary": False,
             "shuffle_data": True,
@@ -153,7 +173,7 @@ class RAGEngine:
             "include_community_weight": True,
             "community_weight_name": "occurrence weight",
             "normalize_community_weight": True,
-            "max_tokens": 10000,  # 从4000增加到10000
+            "max_tokens": 6000,  # 从10000减少到6000以减少检索内容
             "context_name": "Reports",
         }
         
@@ -172,7 +192,7 @@ class RAGEngine:
             model=self.chat_model,
             context_builder=self.global_context_builder,
             token_encoder=self.token_encoder,
-            max_data_tokens=10000,  # 从4000增加到10000
+            max_data_tokens=6000,  # 从10000减少到6000以减少检索内容
             map_llm_params=self.map_llm_params,
             reduce_llm_params=self.reduce_llm_params,
             allow_general_knowledge=False,
@@ -196,20 +216,20 @@ class RAGEngine:
             token_encoder=self.token_encoder,
         )
 
-        # 大幅减少max_tokens以避免上下文超限
+        # 大幅减少max_tokens以避免上下文超限，优化API调用效率
         self.local_context_params = {
-            "text_unit_prop": 0.5,
-            "community_prop": 0.1,
-            "conversation_history_max_turns": 3,  # 从5减少到3
+            "text_unit_prop": 0.4,  # 从0.5减少到0.4
+            "community_prop": 0.05,  # 从0.1减少到0.05
+            "conversation_history_max_turns": 2,  # 从3减少到2
             "conversation_history_user_turns_only": True,
-            "top_k_mapped_entities": 5,  # 从10减少到5
-            "top_k_relationships": 5,  # 从10减少到5
+            "top_k_mapped_entities": 3,  # 从5减少到3
+            "top_k_relationships": 3,  # 从5减少到3
             "include_entity_rank": True,
             "include_relationship_weight": True,
             "include_community_rank": False,
             "return_candidate_context": False,
             "embedding_vectorstore_key": EntityVectorStoreKey.ID,
-            "max_tokens": 10000,  # 从4000增加到10000
+            "max_tokens": 6000,  # 从10000减少到6000以减少检索内容
         }
         
         self.local_model_params = {
@@ -227,7 +247,7 @@ class RAGEngine:
         )
     
     def _truncate_text(self, text: str, max_tokens: int = 2000) -> str:
-        """截断文本以避免token超限"""
+        """截断文本以避免token超限 - 已弃用，保留向后兼容"""
         if not text:
             return text
         
@@ -239,8 +259,80 @@ class RAGEngine:
         truncated_tokens = tokens[:max_tokens]
         return self.token_encoder.decode(truncated_tokens)
     
+    def _chunk_text(self, text: str, max_tokens_per_chunk: int = 15000, overlap_tokens: int = 500) -> List[Dict[str, Any]]:
+        """
+        将长文本分块，用于并行处理（大块优化版本，减少API调用次数）
+        
+        Args:
+            text: 要分块的文本
+            max_tokens_per_chunk: 每个分块的最大token数（大幅增加到15000以减少分块数量）
+            overlap_tokens: 分块之间的重叠token数（增加到500）
+            
+        Returns:
+            分块列表，每个分块包含文本、位置信息等
+        """
+        if not text:
+            return []
+        
+        tokens = self.token_encoder.encode(text)
+        total_tokens = len(tokens)
+        
+        # 如果文本不太长，直接返回单个分块
+        if total_tokens <= max_tokens_per_chunk:
+            return [{
+                "chunk_id": 0,
+                "text": text,
+                "start_token": 0,
+                "end_token": total_tokens,
+                "total_tokens": total_tokens,
+                "chunk_tokens": total_tokens,
+                "is_complete": True
+            }]
+        
+        chunks = []
+        chunk_id = 0
+        start = 0
+        
+        # 大幅减少最大分块数量以减少API调用次数
+        max_chunks = 10  # 从8减少到4，最多4个API调用
+        min_chunk_size = total_tokens // max_chunks if total_tokens > max_tokens_per_chunk * max_chunks else max_tokens_per_chunk
+        
+        while start < total_tokens and len(chunks) < max_chunks:
+            if len(chunks) == max_chunks - 1:
+                # 最后一个分块包含所有剩余内容
+                end = total_tokens
+            else:
+                end = min(start + max_tokens_per_chunk, total_tokens)
+                # 确保分块不会太小
+                if total_tokens - end < min_chunk_size and end < total_tokens:
+                    end = total_tokens
+            
+            # 提取当前分块的token
+            chunk_tokens = tokens[start:end]
+            chunk_text = self.token_encoder.decode(chunk_tokens)
+            
+            chunks.append({
+                "chunk_id": chunk_id,
+                "text": chunk_text,
+                "start_token": start,
+                "end_token": end,
+                "total_tokens": total_tokens,
+                "chunk_tokens": len(chunk_tokens),
+                "is_complete": (len(chunks) == 1 and end >= total_tokens)
+            })
+            
+            chunk_id += 1
+            
+            # 下一个分块的起始位置，考虑重叠
+            if end >= total_tokens:
+                break
+            start = end - overlap_tokens
+        
+        print(f"📊 [大块优化] 原始 {total_tokens} tokens 分为 {len(chunks)} 个大分块（每块最多 {max_tokens_per_chunk} tokens，限制最多 {max_chunks} 个分块以减少API调用）")
+        return chunks
+    
     async def global_search_retrieve(self, query: str) -> Dict[str, Any]:
-        """全局搜索 - 仅检索阶段，展示RAG召回内容"""
+        """全局搜索 - 仅检索阶段，返回完整召回内容用于分块处理"""
         try:
             print(f"🔍 [RAG检索] 正在检索全局信息: {query}")
             
@@ -251,8 +343,7 @@ class RAGEngine:
                 **self.global_context_params
             )
             
-            # 截断上下文以避免token超限
-            # 更安全地处理context对象
+            # 处理context对象，获取原始文本
             if hasattr(context, 'context_text'):
                 context_text = context.context_text
             elif hasattr(context, 'text'):
@@ -265,23 +356,31 @@ class RAGEngine:
                 # 如果都没有，尝试转换为字符串
                 context_text = str(context)
             
-            truncated_context = self._truncate_text(context_text, max_tokens=8000)  # 从3000增加到8000
+            # 计算原始长度
+            original_tokens = len(self.token_encoder.encode(context_text))
             
-            print(f" [RAG检索] 全局检索完成，获得 {len(truncated_context)} 字符的上下文")
-            print(f"🤖 [Agent调用] 正在使用Agent调用LLM生成回答...")
+            # 大分块处理（大幅减少分块数量以减少API调用次数）
+            chunks = self._chunk_text(context_text, max_tokens_per_chunk=20000, overlap_tokens=1500)
+            
+            print(f"✅ [RAG检索] 全局检索完成，原始内容 {original_tokens} tokens，分为 {len(chunks)} 个大分块")
             
             return {
                 "method": "global_retrieve",
                 "query": query,
                 "retrieved_context": {
-                    "context_text": truncated_context,
-                    "context_length": len(truncated_context),
-                    "context_summary": "GraphRAG全局搜索检索到的社区报告和实体信息（已截断）"
+                    "full_text": context_text,
+                    "original_length": len(context_text),
+                    "original_tokens": original_tokens,
+                    "chunks": chunks,
+                    "total_chunks": len(chunks),
+                    "context_summary": f"GraphRAG全局搜索检索到的社区报告和实体信息（完整内容，{len(chunks)}个大分块，减少API调用）"
                 },
-                "success": True
+                "context_ready": True,
+                "success": True,
+                "note": "检索完成，请使用parallel_chunk_analysis_tool进行分析"
             }
         except Exception as e:
-            print(f"[RAG检索] 全局检索失败: {e}")
+            print(f"❌ [RAG检索] 全局检索失败: {e}")
             return {
                 "method": "global_retrieve", 
                 "query": query,
@@ -349,7 +448,7 @@ class RAGEngine:
             }
     
     async def local_search_retrieve(self, query: str) -> Dict[str, Any]:
-        """局部搜索 - 仅检索阶段，展示RAG召回内容"""
+        """局部搜索 - 仅检索阶段，返回完整召回内容用于分块处理"""
         try:
             print(f"🔍 [RAG检索] 正在检索局部信息: {query}")
             
@@ -360,8 +459,7 @@ class RAGEngine:
                 **self.local_context_params
             )
             
-            # 截断上下文以避免token超限
-            # 更安全地处理context对象
+            # 处理context对象，获取原始文本
             if hasattr(context, 'context_text'):
                 context_text = context.context_text
             elif hasattr(context, 'text'):
@@ -374,20 +472,28 @@ class RAGEngine:
                 # 如果都没有，尝试转换为字符串
                 context_text = str(context)
             
-            truncated_context = self._truncate_text(context_text, max_tokens=8000)  # 从3000增加到8000
+            # 计算原始长度
+            original_tokens = len(self.token_encoder.encode(context_text))
             
-            print(f" [RAG检索] 局部检索完成，获得 {len(truncated_context)} 字符的上下文")
-            print(f"🤖 [Agent调用] 正在使用Agent调用LLM生成回答...")
+            # 大分块处理（大幅减少分块数量以减少API调用次数）
+            chunks = self._chunk_text(context_text, max_tokens_per_chunk=20000, overlap_tokens=1500)
+            
+            print(f"✅ [RAG检索] 局部检索完成，原始内容 {original_tokens} tokens，分为 {len(chunks)} 个大分块")
             
             return {
                 "method": "local_retrieve",
                 "query": query,
                 "retrieved_context": {
-                    "context_text": truncated_context,
-                    "context_length": len(truncated_context),
-                    "context_summary": "GraphRAG局部搜索检索到的文本单元、实体和关系信息（已截断）"
+                    "full_text": context_text,
+                    "original_length": len(context_text),
+                    "original_tokens": original_tokens,
+                    "chunks": chunks,
+                    "total_chunks": len(chunks),
+                    "context_summary": f"GraphRAG局部搜索检索到的文本单元、实体和关系信息（完整内容，{len(chunks)}个大分块，减少API调用）"
                 },
-                "success": True
+                "context_ready": True,
+                "success": True,
+                "note": "检索完成，请使用parallel_chunk_analysis_tool进行分析"
             }
         except Exception as e:
             print(f"❌ [RAG检索] 局部检索失败: {e}")

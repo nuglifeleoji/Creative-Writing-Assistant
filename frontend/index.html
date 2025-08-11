@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能创作助手 - GraphRAG</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-brain"></i>
+                    <span>GraphRAG</span>
+                </div>
+            </div>
+            
+            <!-- 书本管理 -->
+            <div class="sidebar-section">
+                <h3><i class="fas fa-book"></i> 书本管理</h3>
+                <div class="book-controls">
+                    <button id="listBooksBtn" class="btn btn-primary">
+                        <i class="fas fa-list"></i> 列出书本
+                    </button>
+                    <button id="addBookBtn" class="btn btn-secondary">
+                        <i class="fas fa-plus"></i> 添加书本
+                    </button>
+                </div>
+                <div id="bookList" class="book-list">
+                    <!-- 书本列表将在这里动态显示 -->
+                </div>
+                <div id="currentBook" class="current-book">
+                    <span>当前书本：</span>
+                    <span id="currentBookName">未选择</span>
+                </div>
+            </div>
+
+            <!-- 工具选择 -->
+            <div class="sidebar-section">
+                <h3><i class="fas fa-tools"></i> 工具选择</h3>
+                <div class="tool-categories">
+                    <div class="tool-category">
+                        <h4>RAG检索</h4>
+                        <button class="tool-btn" data-tool="global_search_retrieve">
+                            <i class="fas fa-search"></i> 全局检索
+                        </button>
+                        <button class="tool-btn" data-tool="local_search_retrieve">
+                            <i class="fas fa-search-plus"></i> 局部检索
+                        </button>
+                    </div>
+                    <div class="tool-category">
+                        <h4>LLM生成</h4>
+                        <button class="tool-btn" data-tool="global_search_generate">
+                            <i class="fas fa-magic"></i> 全局生成
+                        </button>
+                        <button class="tool-btn" data-tool="local_search_generate">
+                            <i class="fas fa-magic"></i> 局部生成
+                        </button>
+                    </div>
+                    <div class="tool-category">
+                        <h4>独立工具</h4>
+                        <button class="tool-btn" data-tool="llm_generate">
+                            <i class="fas fa-robot"></i> LLM生成
+                        </button>
+                        <button class="tool-btn" data-tool="llm_analyze">
+                            <i class="fas fa-chart-line"></i> 文本分析
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 设置 -->
+            <div class="sidebar-section">
+                <h3><i class="fas fa-cog"></i> 设置</h3>
+                <div class="settings">
+                    <label class="setting-item">
+                        <span>自动保存对话</span>
+                        <input type="checkbox" id="autoSave" checked>
+                    </label>
+                    <label class="setting-item">
+                        <span>显示工具调用</span>
+                        <input type="checkbox" id="showTools" checked>
+                    </label>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 顶部导航 -->
+            <header class="top-nav">
+                <div class="nav-left">
+                    <button id="sidebarToggle" class="btn btn-icon">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h1>智能创作助手</h1>
+                </div>
+                <div class="nav-right">
+                    <button id="clearChatBtn" class="btn btn-outline">
+                        <i class="fas fa-trash"></i> 清空对话
+                    </button>
+                    <button id="exportChatBtn" class="btn btn-outline">
+                        <i class="fas fa-download"></i> 导出
+                    </button>
+                </div>
+            </header>
+
+            <!-- 聊天区域 -->
+            <div class="chat-container">
+                <div id="chatMessages" class="chat-messages">
+                    <!-- 欢迎消息 -->
+                    <div class="message system-message">
+                        <div class="message-content">
+                            <i class="fas fa-robot"></i>
+                            <div class="message-text">
+                                <h3>欢迎使用智能创作助手！</h3>
+                                <p>我可以帮助你进行文本分析、创作和探索。请先选择一个书本，然后开始你的创作之旅。</p>
+                                <div class="quick-actions">
+                                    <button class="quick-action-btn" onclick="listBooks()">
+                                        <i class="fas fa-list"></i> 查看可用书本
+                                    </button>
+                                    <button class="quick-action-btn" onclick="showExample()">
+                                        <i class="fas fa-lightbulb"></i> 查看示例
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- AI思考过程显示区域 -->
+                <div id="thinkingProcess" class="thinking-process" style="display: none;">
+                    <div class="thinking-header">
+                        <i class="fas fa-brain"></i>
+                        <span>AI思考过程</span>
+                        <button class="thinking-toggle" onclick="toggleThinkingProcess()">
+                            <i class="fas fa-chevron-up"></i>
+                        </button>
+                    </div>
+                    <div id="thinkingSteps" class="thinking-steps"></div>
+                </div>
+
+                <!-- 输入区域 -->
+                <div class="chat-input-container">
+                    <div class="input-wrapper">
+                        <textarea 
+                            id="messageInput" 
+                            placeholder="输入你的问题或创作需求..."
+                            rows="1"
+                        ></textarea>
+                        <div class="input-actions">
+                            <button id="sendBtn" class="btn btn-primary">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="input-tips">
+                        <span>按 Enter 发送，Shift + Enter 换行</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 模态框 -->
+        <div id="modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modalTitle">标题</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body" id="modalBody">
+                    <!-- 模态框内容 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 加载指示器 -->
+        <div id="loadingIndicator" class="loading-indicator">
+            <div class="loading-spinner"></div>
+            <span>正在处理...</span>
+        </div>
+    </div>
+
+    <script src="script_enhanced.js"></script>
+</body>
+</html>

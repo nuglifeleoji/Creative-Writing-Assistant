@@ -295,6 +295,7 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
                 "success": False
             }, ensure_ascii=False)
     
+
     @tool
     async def switch_book_tool(book_name: str) -> str:
         """切换到指定的书本。book_name是要切换到的书本名称。"""
@@ -356,6 +357,7 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
             
             # 构建提示
             prompt = f"""基于以下检索到的上下文信息，回答用户的问题：
+    
 
 用户问题：{query}
 
@@ -714,9 +716,8 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         local_search_generate_tool,
         
         # === 新增：独立LLM调用工具 ===
-        # llm_generate_tool,
-        # llm_analyze_tool,
-        
+        llm_generate_tool,
+        llm_analyze_tool,
         # === 原有工具 ===
         get_characters_tool,
         get_relationships_tool,

@@ -770,7 +770,8 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
     )
 
 
-    prompt = f"""
+    # 将 prompt 字符串重命名为 prompt_text，避免与 prompt 模块冲突
+    prompt_text = f"""
 你是一个智能创作助手，可以进行信息分析和探索，通过系统性的调查来完成复杂的创作任务。
 
 ## 重要说明：多书本支持和RAG检索分离工具
@@ -832,22 +833,19 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
     """
 
     prompt_obj = ChatPromptTemplate.from_messages([
-        ("system", prompt_template),
+        ("system", prompt_text),  # 使用 prompt_text 而不是 prompt
         MessagesPlaceholder(variable_name="chat_history"),
         ("user", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
-    # prompt = ChatPromptTemplate.from_messages([
-    #     ("system", prompt),
-    #     ("user", "{input}\n\n{agent_scratchpad}"),
-    # ])
-
+    # 使用 partial 来预设变量值
     final_prompt = prompt_obj.partial(
         functions=tools,
-        guidelines=prompt.build_guidelines(),
+        guidelines=prompt.build_guidelines(),  # 现在可以正确调用 prompt 模块
         requirements=prompt.build_requirements(),
-        response_format=prompt.build_response_format()
+        response_format=prompt.build_response_format(),
+        history=""  # 添加空的history变量
     )
 
     # 创建 Agent
@@ -906,35 +904,22 @@ async def main() -> None:
     agent_executor = create_graphrag_agent(graph_agent)
 
     print("LangChain Agent with GraphRAG (Python API) tools is ready. Type 'exit' to quit.")
-    history = []
     
     while True:
         user_query = input("\n请输入你的问题：")
-        # history.append({"role": "user", "content": user_query})
-        # recent_history = history[-4:]  # 只保留最近的4条历史记录
-        # history_text = ""
-        # for msg in recent_history:
-        #     prefix = "用户：" if msg["role"] == "user" else "助手："
-        #     history_text += f"{prefix}{msg['content']}\n"
         if user_query.lower() == 'exit':
             break
 
         try:
             # 使用异步调用，匹配异步工具
             response = await agent_executor.ainvoke({
-                "input": user_query, 
-                "guidelines": prompt.build_guidelines(), 
-                "functions": agent_executor.tools, 
-                "requirements": prompt.build_requirements(), 
-                "response_format": prompt.build_response_format(), 
-                "history": history_text
+                "input": user_query
             })
             
             # 恢复输出显示
             print("\n--- Agent 回答 ---")
             print(response.get("output"))
             print("--------------------\n")
-            history.append({"role": "assistant", "content": response.get("output")})
             
         except Exception as e:
             print(f"发生错误：{e}")

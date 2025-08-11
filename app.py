@@ -138,7 +138,9 @@ def initialize_agent():
             ("超新星纪元", "./cxx/output"),
             ("白夜行", "./rag_book2/ragtest/output"),
             ("弗兰肯斯坦", "./tencent/output"),
-            ("沙丘", "./rag/output")  # 默认的rag/output
+            ("沙丘", "./rag/output"),
+            ("嫌疑人x的献身", "./book7/output"),
+            ("斗罗大陆4", "./book8/output") 
         ]
         
         loaded_books = []

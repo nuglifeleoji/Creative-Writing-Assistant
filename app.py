@@ -132,11 +132,13 @@ def initialize_agent():
         
         # 定义要加载的书本列表
         books_to_load = [
-            ("book4", "./book4/output"),
-            ("book5", "./book5/output"), 
-            ("book6", "./book6/output"),
-            ("tencent", "./tencent/output"),
-            ("default", "./rag/output")  # 默认的rag/output
+            ("平凡的世界", "./book4/output"),
+            ("三体", "./book5/output"), 
+            ("三体2", "./book6/output"),
+            ("超新星纪元", "./cxx/output"),
+            ("白夜行", "./rag_book2/ragtest/output"),
+            ("弗兰肯斯坦", "./tencent/output"),
+            ("沙丘", "./rag/output")  # 默认的rag/output
         ]
         
         loaded_books = []

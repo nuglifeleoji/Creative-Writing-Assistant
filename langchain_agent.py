@@ -279,7 +279,8 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         azure_endpoint="https://tcamp.openai.azure.com/",
         openai_api_key=api_key,
         temperature=0.85,   # 更高创造性
-        max_tokens=2000     # 从1000增加到2000
+        max_tokens=2000,    # 从1000增加到2000
+        streaming=True      # 启用流式输出
     )
 
     # 使用 @tool 装饰器，将 GraphAnalysisAgent 的方法包装成 LangChain 工具
@@ -380,6 +381,7 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
             
             # 构建提示
             prompt = f"""基于以下检索到的上下文信息，回答用户的问题：
+    
 
 用户问题：{query}
 
@@ -1330,7 +1332,8 @@ async def main() -> None:
         ("book5", "./book5/output"), 
         ("book6", "./book6/output"),
         ("tencent", "./tencent/output"),
-        ("default", "./rag/output")  # 默认的rag/output
+        ("default", "./rag/output"),  # 默认的rag/output
+        ("sanguo","./sanguo/output")
     ]
     
     loaded_books = []

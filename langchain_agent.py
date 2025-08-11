@@ -1331,7 +1331,8 @@ async def main() -> None:
         ("book5", "./book5/output"), 
         ("book6", "./book6/output"),
         ("tencent", "./tencent/output"),
-        ("default", "./rag/output")  # 默认的rag/output
+        ("default", "./rag/output"),  # 默认的rag/output
+        ("sanguo","./sanguo/output")
     ]
     
     loaded_books = []

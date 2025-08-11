@@ -549,10 +549,10 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         return json.dumps(result, ensure_ascii=False, default=str)
     tools = [
         # === 新增的RAG检索分离工具 ===
-        global_search_retrieve_tool,
-        global_search_generate_tool,
-        local_search_retrieve_tool,
-        local_search_generate_tool,
+        # global_search_retrieve_tool,
+        # # global_search_generate_tool,
+        # local_search_retrieve_tool,
+        # local_search_generate_tool,
         
         # === 新增：独立LLM调用工具 ===
         # llm_generate_tool,
@@ -610,41 +610,44 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         max_tokens=2000     # 从1000增加到2000
     )
 
+# ### RAG检索分离工具：
+# - **global_search_retrieve_tool**: 仅进行全局搜索的检索，展示GraphRAG召回的内容
+# - **global_search_generate_tool**: 使用预检索的上下文进行LLM生成
+# - **local_search_retrieve_tool**: 仅进行局部搜索的检索，展示GraphRAG召回的内容  
+# - **local_search_generate_tool**: 使用预检索的上下文进行LLM生成
+
+# ### 独立LLM调用工具：
+# - **llm_generate_tool**: 独立调用大模型生成回答，用户可以清楚看到LLM正在生成内容
+# - **llm_analyze_tool**: 使用大模型分析文本，支持不同类型的分析（character, theme, plot等）
+
+
+# ## 重要说明：RAG检索分离工具和独立LLM调用
+# 现在你有新的工具可以分离RAG的检索和生成过程，以及独立的LLM调用：
+
+
+
+# ### 使用建议：
+# 1. **展示RAG过程**：先调用 *_retrieve_tool 展示检索到的内容，再调用 *_generate_tool 进行LLM生成
+# 2. **独立LLM调用**：当需要创造性内容或复杂分析时，使用 llm_generate_tool 或 llm_analyze_tool
+# 3. **完整流程**：或者直接使用原有的完整工具（如 global_search_tool）
+
+# ### 用户可见性：
+# - 🔍 [RAG检索] 表示正在检索相关信息
+# - 🤖 [LLM生成] 表示正在调用大模型生成内容
+# - ✅ 表示操作完成
+# - ❌ 表示操作失败
+
+# ### 智能决策指南：
+# - **人物相关问题**：优先使用 get_character_profile_tool 或 get_characters_tool
+# - **关系分析**：使用 get_relationships_tool 分析人物关系
+# - **背景知识**：使用 background_knowledge_tool 或 get_worldview_tool
+# - **情节分析**：使用 global_search_tool 进行全局分析
+# - **具体细节**：使用 local_search_tool 进行精确检索
+# - **创作任务**：使用 llm_generate_tool 进行创造性生成
 
     prompt_template = f"""
 你是一个智能创作助手，专门分析《沙丘》(Dune)系列小说，可以进行信息分析和探索，通过系统性的调查来完成复杂的创作任务。
 
-## 重要说明：RAG检索分离工具和独立LLM调用
-现在你有新的工具可以分离RAG的检索和生成过程，以及独立的LLM调用：
-
-### RAG检索分离工具：
-- **global_search_retrieve_tool**: 仅进行全局搜索的检索，展示GraphRAG召回的内容
-- **global_search_generate_tool**: 使用预检索的上下文进行LLM生成
-- **local_search_retrieve_tool**: 仅进行局部搜索的检索，展示GraphRAG召回的内容  
-- **local_search_generate_tool**: 使用预检索的上下文进行LLM生成
-
-### 独立LLM调用工具：
-- **llm_generate_tool**: 独立调用大模型生成回答，用户可以清楚看到LLM正在生成内容
-- **llm_analyze_tool**: 使用大模型分析文本，支持不同类型的分析（character, theme, plot等）
-
-### 使用建议：
-1. **展示RAG过程**：先调用 *_retrieve_tool 展示检索到的内容，再调用 *_generate_tool 进行LLM生成
-2. **独立LLM调用**：当需要创造性内容或复杂分析时，使用 llm_generate_tool 或 llm_analyze_tool
-3. **完整流程**：或者直接使用原有的完整工具（如 global_search_tool）
-
-### 用户可见性：
-- 🔍 [RAG检索] 表示正在检索相关信息
-- 🤖 [LLM生成] 表示正在调用大模型生成内容
-- ✅ 表示操作完成
-- ❌ 表示操作失败
-
-### 智能决策指南：
-- **人物相关问题**：优先使用 get_character_profile_tool 或 get_characters_tool
-- **关系分析**：使用 get_relationships_tool 分析人物关系
-- **背景知识**：使用 background_knowledge_tool 或 get_worldview_tool
-- **情节分析**：使用 global_search_tool 进行全局分析
-- **具体细节**：使用 local_search_tool 进行精确检索
-- **创作任务**：使用 llm_generate_tool 进行创造性生成
 
 ### 历史记录
 {{chat_history}}

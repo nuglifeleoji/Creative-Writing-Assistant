@@ -10,7 +10,7 @@ from typing import Dict, Any
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv("./.env")
 
 # 优先读取 OPENAI_API_KEY，其次 AZURE_OPENAI_API_KEY，不要把密钥当作环境变量名
 api_key =os.getenv("AZURE_OPENAI_API_KEY") or ""
@@ -26,6 +26,32 @@ from search.rag_engine import rag_engine, multi_book_manager, RAGEngine
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 import prompt_utils
 import prompt
+
+from langchain.memory import ConversationSummaryBufferMemory
+from langchain_openai import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+
+# 1. 初始化一个用于总结的LLM
+# 可以用一个便宜、快速的模型来做总结，也可以用主模型
+llm_hist = AzureChatOpenAI(
+        openai_api_version="2024-12-01-preview",
+        azure_deployment="gpt-4o",
+        model_name="gpt-4o",
+        azure_endpoint="https://tcamp.openai.azure.com/",
+        openai_api_key=api_key,
+        temperature=0.1,   # 更高创造性
+        max_tokens=2000     # 从1000增加到2000
+)
+
+# 2. 创建带总结功能的Memory
+# 当token超过1000时，开始将旧消息总结
+memory = ConversationSummaryBufferMemory(
+    llm=llm_hist,
+    max_token_limit=1500,  # 设置token限制
+    memory_key="chat_history", # 与prompt中的key对应
+    return_messages=True,
+)
+
 
 class GraphAnalysisAgent:
     def __init__(self, use_multi_book=True):
@@ -805,16 +831,30 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
 {{response_format}}
     """
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", prompt),
-        ("user", "{input}\n\n{agent_scratchpad}"),
+    prompt_obj = ChatPromptTemplate.from_messages([
+        ("system", prompt_template),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("user", "{input}"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
+    # prompt = ChatPromptTemplate.from_messages([
+    #     ("system", prompt),
+    #     ("user", "{input}\n\n{agent_scratchpad}"),
+    # ])
+
+    final_prompt = prompt_obj.partial(
+        functions=tools,
+        guidelines=prompt.build_guidelines(),
+        requirements=prompt.build_requirements(),
+        response_format=prompt.build_response_format()
+    )
+
     # 创建 Agent
-    agent = create_tool_calling_agent(llm=llm, tools=tools, prompt=prompt)
+    agent = create_tool_calling_agent(llm=llm, tools=tools, prompt=final_prompt)
 
     # 创建 Agent 执行器
-    return AgentExecutor(agent=agent, tools=tools, verbose=True)
+    return AgentExecutor(agent=agent, tools=tools, memory=memory, verbose=True)
 
 # --- 主程序入口 ---
 async def main() -> None:
@@ -870,12 +910,12 @@ async def main() -> None:
     
     while True:
         user_query = input("\n请输入你的问题：")
-        history.append({"role": "user", "content": user_query})
-        recent_history = history[-4:]  # 只保留最近的4条历史记录
-        history_text = ""
-        for msg in recent_history:
-            prefix = "用户：" if msg["role"] == "user" else "助手："
-            history_text += f"{prefix}{msg['content']}\n"
+        # history.append({"role": "user", "content": user_query})
+        # recent_history = history[-4:]  # 只保留最近的4条历史记录
+        # history_text = ""
+        # for msg in recent_history:
+        #     prefix = "用户：" if msg["role"] == "user" else "助手："
+        #     history_text += f"{prefix}{msg['content']}\n"
         if user_query.lower() == 'exit':
             break
 

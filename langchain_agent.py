@@ -1330,6 +1330,7 @@ async def main() -> None:
         ("book4", "./book4/output"),
         ("book5", "./book5/output"), 
         ("book6", "./book6/output"),
+        ("book2", "./rag_book2/ragtest/output"),
         ("tencent", "./tencent/output"),
         ("default", "./rag/output"),  # 默认的rag/output
         ("sanguo","./sanguo/output")

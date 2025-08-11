@@ -30,9 +30,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class RAGEngine:
-    """GraphRAG引擎，将检索和LLM调用分离"""
+    """GraphRAG引擎，将检索和LLM调用分离，支持多书本"""
     
-    def __init__(self):
+    def __init__(self, input_dir: str = "./rag/output"):
+        """
+        初始化RAG引擎
+        
+        Args:
+            input_dir: 输入目录路径，包含GraphRAG处理后的数据文件
+        """
+        self.input_dir = input_dir
         self.api_key = os.getenv("AZURE_OPENAI_API_KEY")
         self.embedding_key = os.getenv("Embedding_key")
         
@@ -78,15 +85,20 @@ class RAGEngine:
         
     def _init_data(self):
         """初始化数据"""
-        INPUT_DIR = "./rag/output"
         COMMUNITY_LEVEL = 2
         
+        # 检查输入目录是否存在
+        if not os.path.exists(self.input_dir):
+            raise ValueError(f"输入目录不存在: {self.input_dir}")
+        
+        print(f"📚 正在加载书本数据: {self.input_dir}")
+        
         # 读取数据文件
-        self.community_df = pd.read_parquet(f"{INPUT_DIR}/communities.parquet")
-        self.entity_df = pd.read_parquet(f"{INPUT_DIR}/entities.parquet")
-        self.report_df = pd.read_parquet(f"{INPUT_DIR}/community_reports.parquet")
-        self.relationship_df = pd.read_parquet(f"{INPUT_DIR}/relationships.parquet")
-        self.text_unit_df = pd.read_parquet(f"{INPUT_DIR}/text_units.parquet")
+        self.community_df = pd.read_parquet(f"{self.input_dir}/communities.parquet")
+        self.entity_df = pd.read_parquet(f"{self.input_dir}/entities.parquet")
+        self.report_df = pd.read_parquet(f"{self.input_dir}/community_reports.parquet")
+        self.relationship_df = pd.read_parquet(f"{self.input_dir}/relationships.parquet")
+        self.text_unit_df = pd.read_parquet(f"{self.input_dir}/text_units.parquet")
         
         # 初始化GraphRAG数据结构
         self.communities = read_indexer_communities(self.community_df, self.report_df)
@@ -99,7 +111,9 @@ class RAGEngine:
         self.description_embedding_store = LanceDBVectorStore(
             collection_name="default-entity-description",
         )
-        self.description_embedding_store.connect(db_uri=f"{INPUT_DIR}/lancedb")
+        self.description_embedding_store.connect(db_uri=f"{self.input_dir}/lancedb")
+        
+        print(f"✅ 书本数据加载完成: {self.input_dir}")
         
     def _init_engines(self):
         """初始化搜索引擎"""
@@ -443,5 +457,72 @@ class RAGEngine:
                 "success": False
             }
 
-# 全局实例
+
+# 全局实例 - 默认使用 ./rag/output
 rag_engine = RAGEngine()
+
+# 多书本管理器
+class MultiBookManager:
+    """多书本管理器，用于管理多个RAG引擎实例"""
+    
+    def __init__(self):
+        self.engines = {}  # 缓存引擎实例
+        self.current_book = None
+    
+    def add_book(self, book_name: str, book_folder: str):
+        """添加新书本"""
+        if not os.path.exists(book_folder):
+            raise ValueError(f"书本文件夹不存在: {book_folder}")
+        
+        # 创建新的RAG引擎实例
+        self.engines[book_name] = RAGEngine(input_dir=book_folder)
+        print(f"✅ 添加书本: {book_name} -> {book_folder}")
+        
+        # 如果是第一本书，自动设置为当前书本
+        if self.current_book is None:
+            self.current_book = book_name
+    
+    def switch_book(self, book_name: str):
+        """切换到指定书本"""
+        if book_name not in self.engines:
+            raise ValueError(f"书本不存在: {book_name}")
+        
+        if self.current_book == book_name:
+            print(f"ℹ️ 已经在书本: {book_name}")
+            return
+        
+        print(f"🔄 切换到书本: {book_name}")
+        self.current_book = book_name
+    
+    def get_current_engine(self) -> RAGEngine:
+        """获取当前书本的引擎"""
+        if self.current_book is None:
+            raise ValueError("没有选择任何书本，请先使用 add_book() 添加书本")
+        
+        return self.engines[self.current_book]
+    
+    def list_books(self) -> List[str]:
+        """列出所有可用的书本"""
+        return list(self.engines.keys())
+    
+    def get_current_book(self) -> Optional[str]:
+        """获取当前书本名称"""
+        return self.current_book
+    
+    def remove_book(self, book_name: str):
+        """移除书本"""
+        if book_name in self.engines:
+            del self.engines[book_name]
+            print(f"✅ 移除书本: {book_name}")
+            
+            # 如果移除的是当前书本，切换到其他书本
+            if self.current_book == book_name:
+                if self.engines:
+                    first_book = list(self.engines.keys())[0]
+                    self.current_book = first_book
+                else:
+                    self.current_book = None
+
+
+# 全局多书本管理器实例
+multi_book_manager = MultiBookManager()

@@ -22,7 +22,9 @@ from langchain import hub
 from langchain_openai import ChatOpenAI,AzureChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
-from search.rag_engine import rag_engine, multi_book_manager, RAGEngine
+# If you use quick engine, modify this line
+from search.quick_engine import rag_engine, multi_book_manager, RAGEngine
+#-----------------------------------------------------------------------
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 import prompt_utils
 import prompt

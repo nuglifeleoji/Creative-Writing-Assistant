@@ -3,11 +3,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Virtual environments
-.env
-.venv
-env/
+# Python venv
+.venv311/
+.venv/
 venv/
+env/
 
 # Packaging
 build/

@@ -35,9 +35,10 @@ class StreamingCallbackHandler(BaseCallbackHandler):
         self._sent_events = set()  # 用于去重
 
     def _send(self, etype: str, payload: Dict[str, Any]):
-        # 对于token事件，不进行去重（因为每个token都不同）
+        # 对于 token 事件：不去重，直接推送，实现真流式输出
         if etype == "llm_token":
-            # 直接跳过token事件，避免前端显示过多无用信息
+            sse_message = f"event: {etype}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+            self.yield_func(sse_message)
             return
             
         # 对于其他事件，使用事件类型+关键内容进行去重
@@ -193,6 +194,13 @@ def initialize_agent():
     except Exception as e:
         print(f"❌ 代理初始化失败: {e}")
         return False
+
+try:
+    if os.environ.get("INIT_ON_IMPORT", "1") == "1" and graph_agent is None:
+        print("⚙️ WSGI 导入阶段：尝试自动初始化 Agent...")
+        initialize_agent()
+except Exception as _import_init_err:
+    print(f"⚠️ 导入期初始化异常（可忽略，将在首个请求时再试）：{_import_init_err}")
 
 @app.route('/')
 def index():

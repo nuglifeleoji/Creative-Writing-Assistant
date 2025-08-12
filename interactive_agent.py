@@ -1201,7 +1201,7 @@ if __name__ == "__main__":
     controller = InteractionController(answerer_agent=answerer)
     
     # 运行20轮交互
-    controller.run_interaction_cycle(cycles=100)
+    controller.run_interaction_cycle(cycles=80)
     
     # 保存收集的数据
     controller.save_data(filename="dune_finetuning_data.jsonl")

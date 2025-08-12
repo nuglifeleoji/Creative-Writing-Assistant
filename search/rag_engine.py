@@ -355,7 +355,7 @@ class RAGEngine:
             original_tokens = len(self.token_encoder.encode(context_text))
             
             # 大分块处理（大幅减少分块数量以减少API调用次数）
-            chunks = self._chunk_text(context_text, max_tokens_per_chunk=20000, overlap_tokens=1500)
+            chunks = self._chunk_text(context_text, max_tokens_per_chunk=250000, overlap_tokens=15000)
             
             print(f"✅ [RAG检索] 全局检索完成，原始内容 {original_tokens} tokens，分为 {len(chunks)} 个大分块")
             

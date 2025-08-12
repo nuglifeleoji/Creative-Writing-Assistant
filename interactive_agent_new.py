@@ -22,7 +22,7 @@ from langchain import hub
 from langchain_openai import ChatOpenAI,AzureChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
-from search.rag_engine import rag_engine, multi_book_manager, RAGEngine
+from search.quick_engine import rag_engine, multi_book_manager, RAGEngine
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 import prompt_utils
 import prompt
@@ -1318,77 +1318,6 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
     # 创建 Agent 执行器
     return AgentExecutor(agent=agent, tools=tools, memory=memory, verbose=True)
 
-async def main() -> None:
-    graph_agent = GraphAnalysisAgent(use_multi_book=True)
-
-    # 自动加载所有可用的书本
-    print("📚 正在自动加载所有可用的书本...")
-    
-    # 定义要加载的书本列表
-    books_to_load = [
-        ("book4", "./book4/output"),
-        ("book5", "./book5/output"), 
-        ("book6", "./book6/output"),
-        ("book2", "./rag_book2/ragtest/output"),
-        ("tencent", "./tencent/output"),
-        ("default", "./rag/output")  # 默认的rag/output
-    ]
-    
-    loaded_books = []
-    for book_name, book_path in books_to_load:
-        try:
-            # 检查路径是否存在
-            if os.path.exists(book_path):
-                # 检查是否包含必要的文件
-                required_files = ["communities.parquet", "entities.parquet", "community_reports.parquet", "relationships.parquet", "text_units.parquet"]
-                missing_files = [f for f in required_files if not os.path.exists(os.path.join(book_path, f))]
-                
-                if not missing_files:
-                    graph_agent.add_book(book_name, book_path)
-                    loaded_books.append(book_name)
-                    print(f"✅ 成功加载书本: {book_name} -> {book_path}")
-                else:
-                    print(f"⚠️ 跳过 {book_name}: 缺少必要文件 {missing_files}")
-            else:
-                print(f"⚠️ 跳过 {book_name}: 路径不存在 {book_path}")
-        except Exception as e:
-            print(f"❌ 加载 {book_name} 失败: {e}")
-    
-    print(f"✅ 总共加载了 {len(loaded_books)} 本书: {', '.join(loaded_books)}")
-    
-    # 如果有书本加载成功，自动选择第一本
-    if loaded_books:
-        first_book = loaded_books[0]
-        graph_agent.switch_book(first_book)
-        print(f"🔄 自动切换到第一本书: {first_book}")
-    else:
-        print("⚠️ 没有加载到任何书本，请手动添加书本")
-
-    # 使用这个实例创建 LangChain Agent
-    agent_executor = create_graphrag_agent(graph_agent)
-
-    print("LangChain Agent with GraphRAG (Python API) tools is ready. Type 'exit' to quit.")
-    
-    while True:
-        user_query = input("\n请输入你的问题：")
-        if user_query.lower() == 'exit':
-            break
-
-        try:
-            # 使用异步调用，匹配异步工具
-            response = await agent_executor.ainvoke({
-                "input": user_query
-            })
-            
-            # 恢复输出显示
-            print("\n--- Agent 回答 ---")
-            print(response.get("output"))
-            print("--------------------\n")
-            
-        except Exception as e:
-            print(f"发生错误：{e}")
-            break
-
 import os
 import json
 import asyncio
@@ -1675,8 +1604,8 @@ class InteractiveDialogueSystem:
         print(f"⚡ 起始问题: {current_question}")
         print(f"{'=' * 50}")
         
-        # 确定对话轮次 (4-6轮)
-        max_turns = random.randint(4, 6)
+        # 确定对话轮次 (3-5轮)
+        max_turns = random.randint(3, 5)
         
         for turn in range(max_turns):
             # 获取回答

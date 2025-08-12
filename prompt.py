@@ -106,31 +106,13 @@ def build_response_format() -> str:
 # 响应格式
 严格使用中文回答！！！
 
-## 1) 处理中（IN_PROGRES / NEED_CLARIFICATION）
-```markdown
-status_update: IN_PROGRES
-thought:
-- 本轮先 global_search 抽主线，再 local_search 验证
-plan:
-- Step1: global_search {query: "..."}
-- Step2: get_characters {need_relations: true}
-tools:
-- name: global_search
-  result_summary:
-    - point: "主题A 概述"
-    - cite: source_id=G1, snippet="……"
-provisional_takeaways:
-- 主题A 可能为“xxx”（证据：G1）
-next_actions:
-- local_search 针对人物B关键抉择片段
-
-## 2) 完成（DONE）
+## 1) 完成（DONE）
 在总结书中信息时可以分条叙述：
 **...**: ...
 **...**: ...
 在进行二次创作时以段落方式呈现，且尽量具体和详细，类似小说的写法，不必分条。
 
-##3) 超预算终止（BUDGET_EXCEEDED）
+##2) 超预算终止（BUDGET_EXCEEDED）
 status_update: BUDGET_EXCEEDED
 what_we_have:
 - 已确认主题与三名主要人物画像
@@ -139,7 +121,7 @@ what_is_missing:
 next_plan_if_approved:
 - 追加 2 次 local_search 限定相关章节
 
-##4) 需要澄清（NEED_CLARIFICATION）
+##3) 需要澄清（NEED_CLARIFICATION）
 status_update: NEED_CLARIFICATION
 clarify_questions:
 - 你要聚焦原著的哪个版本？

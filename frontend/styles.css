@@ -1,3 +1,15 @@
+.magic-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.magic-stream {
+  background: white;
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
 /* 全局样式 */
 * {
     margin: 0;
@@ -98,6 +110,12 @@ body {
 }
 
 .book-item.active {
+    background: #3498db;
+    color: white;
+}
+
+/* 跨书模式多选高亮 */
+.book-item.multi-selected {
     background: #3498db;
     color: white;
 }
@@ -203,6 +221,42 @@ body {
     gap: 10px;
 }
 
+/* 模式下拉菜单 */
+.dropdown { position: relative; }
+.dropdown-menu {
+  position: absolute;
+  right: 0;
+  top: 110%;
+  background: #ffffff;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+  display: none;
+  min-width: 160px;
+  z-index: 50;
+  padding: 6px;
+}
+.dropdown.open .dropdown-menu { display: block; }
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: #333;
+  cursor: pointer;
+}
+.dropdown-item:hover { background: #f3f5f7; }
+
+/* 跨书弹窗复选样式 */
+.checkbox-list { display: flex; flex-direction: column; gap: 6px; }
+.checkbox-item { display: flex; align-items: center; gap: 8px; }
+.checkbox-item input { width: 16px; height: 16px; }
+
 /* 聊天区域样式 */
 .chat-container {
     flex: 1;
@@ -227,6 +281,89 @@ body {
     display: flex;
     gap: 15px;
     max-width: 80%;
+}
+
+.message-content-body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start; /* 操作条与消息左对齐 */
+}
+
+/* 每条助手消息下方的小操作区（润色/修改意见） */
+.message .message-actions {
+    margin-top: 6px;
+    display: inline-flex;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 10px;
+    background: rgba(0,0,0,0.04);
+}
+
+.message .message-actions .icon-btn {
+    padding: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    border: 1px solid #e9ecef;
+    color: #6c757d;
+    cursor: pointer;
+}
+
+.message .message-actions .icon-btn:hover {
+    background: #f8f9fa;
+    color: #495057;
+}
+
+.message .message-actions .icon-btn i {
+    font-size: 16px;
+}
+
+/* 魔法加载动画（润色/点评等待状态） */
+.magic-loading {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: #fff7e6;
+    border: 1px solid #ffe8b3;
+    color: #8c6d1f;
+    padding: 10px 12px;
+    border-radius: 10px;
+}
+
+.magic-loading .magic-star {
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #f4b400;
+    animation: spinStar 1.2s linear infinite;
+}
+
+.magic-loading .magic-text {
+    font-size: 0.9rem;
+}
+
+.magic-dots::after {
+    content: '...';
+    animation: dots 1.2s steps(4, end) infinite;
+}
+
+@keyframes spinStar {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes dots {
+    0% { content: ''; }
+    25% { content: '.'; }
+    50% { content: '..'; }
+    75% { content: '...'; }
+    100% { content: ''; }
 }
 
 .message.user .message-content {
@@ -516,6 +653,12 @@ body {
     background: transparent;
     border: 2px solid #6c757d;
     color: #6c757d;
+}
+
+.btn-outline.active {
+    background: #3498db;
+    color: white;
+    border-color: #3498db;
 }
 
 .btn-outline:hover {

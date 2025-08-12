@@ -1,3 +1,41 @@
+// 多选书的弹窗
+async function showCrossBookSelector() {
+    try {
+        const res = await fetch('/api/books');
+        const books = await res.json();
+        const list = Array.isArray(books) ? books.map(b => b.name) : (books.books || []);
+        const content = `
+            <form id="crossBooksForm" class="form">
+                <div class="form-group">
+                    <div class="checkbox-list">
+                        ${list.map(name => `
+                            <label class="checkbox-item">
+                                <input type="checkbox" name="crossBook" value="${name}" ${selectedCrossBooks.includes(name) ? 'checked' : ''} />
+                                <span>${name}</span>
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">确定</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
+                </div>
+            </form>`;
+        showModal('选择跨书创作的书目', content);
+        const form = document.getElementById('crossBooksForm');
+        form.addEventListener('submit', e => {
+            e.preventDefault();
+            const boxes = form.querySelectorAll('input[name="crossBook"]:checked');
+            selectedCrossBooks = Array.from(boxes).map(b => b.value);
+            closeModal();
+            addMessage('system', `✅ 已选择 ${selectedCrossBooks.length} 本书用于跨书创作`);
+            // 立即刷新列表高亮
+            listBooks();
+        });
+    } catch (e) {
+        addMessage('system', '❌ 获取书本列表失败：' + e.message);
+    }
+}
 // 增强版本 JavaScript - 包含所有功能但优化性能
 console.log('🔍 增强版本加载中...');
 
@@ -7,6 +45,8 @@ let chatHistory = [];
 let isProcessing = false;
 let elements = {};
 let currentAbortController = null;
+let composeMode = 'single';
+let selectedCrossBooks = [];
 
 // 聊天记录持久化
 function saveChatHistory() {
@@ -98,8 +138,35 @@ function renderMessage(type, content, toolCalls = null, messageId = null) {
     // 格式化内容
     textDiv.innerHTML = formatMessage(content);
     
+    // 包裹文本与操作条的竖直容器，便于将操作条放在消息气泡下方
+    const bodyDiv = document.createElement('div');
+    bodyDiv.className = 'message-content-body';
+    bodyDiv.appendChild(textDiv);
+
     contentDiv.appendChild(avatar);
-    contentDiv.appendChild(textDiv);
+    contentDiv.appendChild(bodyDiv);
+
+    // 针对助手消息，增加就地操作按钮（润色/修改意见）
+    if (type === 'assistant') {
+        const actions = document.createElement('div');
+        actions.className = 'message-actions';
+
+        const polishBtn = document.createElement('button');
+        polishBtn.className = 'icon-btn';
+        polishBtn.title = '润色';
+        polishBtn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i>';
+        polishBtn.addEventListener('click', () => polishMessageById(messageId || messageDiv.id));
+
+        const critiqueBtn = document.createElement('button');
+        critiqueBtn.className = 'icon-btn';
+        critiqueBtn.title = '修改意见';
+        critiqueBtn.innerHTML = '<i class="fas fa-comment-dots"></i>';
+        critiqueBtn.addEventListener('click', () => critiqueMessageById(messageId || messageDiv.id));
+
+        actions.appendChild(polishBtn);
+        actions.appendChild(critiqueBtn);
+        bodyDiv.appendChild(actions);
+    }
     messageDiv.appendChild(contentDiv);
     
     elements.chatMessages.appendChild(messageDiv);
@@ -265,6 +332,10 @@ async function sendMessage() {
         addThinkingStep('plan', '📋 制定策略', '正在制定回答策略，准备调用相关工具...');
     
     try {
+        if (composeMode === 'cross') {
+            await sendCrossMessage(message);
+            return;
+        }
         // 创建助手消息容器
         const assistantMessageId = 'msg-' + Date.now();
         const assistantMessage = renderMessage('assistant', '正在思考...', null, assistantMessageId);
@@ -393,6 +464,109 @@ async function sendMessage() {
             addMessage('system', '抱歉，发送消息时出现错误。请稍后重试。');
             addThinkingStep('error', '请求失败', error.message);
         }
+    } finally {
+        showLoading(false);
+        isProcessing = false;
+        toggleStopButton(false);
+        currentAbortController = null;
+    }
+}
+
+// 跨书创作：走 /api/cross-chat
+async function sendCrossMessage(promptText) {
+    if (!selectedCrossBooks || selectedCrossBooks.length === 0) {
+        addMessage('system', '请先选择跨书创作的书目');
+        return;
+    }
+    // 添加用户消息
+    const userMessageId = 'user-' + Date.now();
+    addMessage('user', promptText, null, userMessageId);
+    elements.messageInput.value = '';
+    if (elements.messageInput) elements.messageInput.style.height = 'auto';
+
+    // 状态
+    showLoading(true);
+    isProcessing = true;
+    toggleStopButton(true);
+    currentAbortController = new AbortController();
+
+    // 思考过程面板
+    clearThinkingProcess();
+    showThinkingProcess();
+    addThinkingStep('info', '🎯 跨书理解', `正在分析多书创作需求: "${promptText}"`);
+    addThinkingStep('plan', '📋 策略制定', `将对 ${selectedCrossBooks.length} 本书并行检索→融合→生成`);
+
+    // 助手气泡
+    const assistantMessageId = 'msg-' + Date.now();
+    renderMessage('assistant', '正在思考...', null, assistantMessageId);
+    chatHistory.push({ type: 'assistant', content: '', timestamp: new Date().toISOString(), id: assistantMessageId, toolCalls: null });
+
+    try {
+        const response = await fetch('/api/cross-chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ books: selectedCrossBooks, message: promptText, history: chatHistory.slice(-10), mode: 'both', topK: 5 }),
+            signal: currentAbortController.signal
+        });
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(`跨书请求失败: ${response.status} ${text}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let currentEvent = null;
+        let finalResponse = null;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+            for (const line of lines) {
+                if (line.startsWith('event: ')) {
+                    currentEvent = line.slice(7);
+                } else if (line.startsWith('data: ') && currentEvent) {
+                    const data = line.slice(6);
+                    if (!data.trim()) continue;
+                    if (currentEvent === 'done') break;
+                    try {
+                        const parsed = JSON.parse(data);
+                        // 将book标签映射到思考过程：如果有book，拼接在标题上
+                        if (parsed && parsed.book) {
+                            parsed._bookTag = parsed.book;
+                        }
+                        if (currentEvent === 'final') {
+                            finalResponse = parsed;
+                            updateAssistantMessage(assistantMessageId, { type: 'final', ...parsed }, finalResponse);
+                        } else if (currentEvent === 'error') {
+                            addThinkingStep('error', '发生错误', parsed.error);
+                            updateAssistantMessage(assistantMessageId, { type: 'error', error: parsed.error }, finalResponse);
+                        } else {
+                            // 根据book对事件标题加前缀
+                            if (parsed && parsed._bookTag) {
+                                if (currentEvent === 'tool_start') addThinkingStep('tool', `🔧[${parsed._bookTag}] 工具开始`, parsed.tool || parsed.toolName || '');
+                                else if (currentEvent === 'tool_end') addThinkingStep('success', `✅[${parsed._bookTag}] 工具完成`, (parsed.tool || parsed.toolName || '') + ' 完成');
+                                else if (currentEvent === 'llm_start') addThinkingStep('thinking', `🤖[${parsed._bookTag}] AI推理`, '');
+                                else if (currentEvent === 'llm_end') addThinkingStep('success', `✅[${parsed._bookTag}] 推理结束`, '');
+                                else if (currentEvent === 'status') addThinkingStep('info', `ℹ️[${parsed._bookTag}] 状态`, parsed.message || '');
+                                else if (currentEvent === 'per_book_context') addThinkingStep('info', `📚[${parsed._bookTag}] 上下文`, parsed.preview || '');
+                                else handleSSEEvent(currentEvent, parsed, assistantMessageId);
+                            } else {
+                                handleSSEEvent(currentEvent, parsed, assistantMessageId);
+                            }
+                        }
+                    } catch {}
+                } else if (line === '') {
+                    currentEvent = null;
+                }
+            }
+        }
+    } catch (e) {
+        addMessage('system', '❌ 跨书创作失败：' + e.message);
     } finally {
         showLoading(false);
         isProcessing = false;
@@ -616,16 +790,16 @@ async function listBooks() {
                 const bookItem = document.createElement('div');
                 bookItem.className = 'book-item';
                 
-                // 检查是否是当前书本
+                // 检查是否是当前书本 / 或跨书多选
                 const isCurrentBook = book.name === currentBook || book.isCurrent;
-                if (isCurrentBook) {
+                if (composeMode === 'cross') {
+                    if (selectedCrossBooks.includes(book.name)) {
+                        bookItem.classList.add('multi-selected');
+                    }
+                } else if (isCurrentBook) {
                     bookItem.classList.add('active');
                     console.log('📖 标记当前书本为活动状态:', book.name);
-                    
-                    // 同时更新顶部显示
-                    if (!currentBook) {
-                        updateCurrentBook(book.name);
-                    }
+                    if (!currentBook) updateCurrentBook(book.name);
                 }
                 
                 // 创建按钮并绑定事件（避免字符串拼接问题）
@@ -637,8 +811,20 @@ async function listBooks() {
                 switchBtn.title = `切换到 ${book.name}`;
                 switchBtn.innerHTML = '<i class="fas fa-arrow-right"></i>';
                 switchBtn.addEventListener('click', () => {
-                    console.log('🔄 点击切换按钮，书本名称:', book.name);
-                    switchBook(book.name);
+                    if (composeMode === 'cross') {
+                        const idx = selectedCrossBooks.indexOf(book.name);
+                        if (idx >= 0) {
+                            selectedCrossBooks.splice(idx, 1);
+                            bookItem.classList.remove('multi-selected');
+                        } else {
+                            selectedCrossBooks.push(book.name);
+                            bookItem.classList.add('multi-selected');
+                        }
+                        console.log('🧩 跨书选择:', selectedCrossBooks);
+                    } else {
+                        console.log('🔄 点击切换按钮，书本名称:', book.name);
+                        switchBook(book.name);
+                    }
                 });
                 
                 bookItem.appendChild(bookSpan);
@@ -1130,6 +1316,41 @@ function initializeEventListeners() {
     if (elements.sidebarToggle) {
         elements.sidebarToggle.addEventListener('click', toggleSidebar);
     }
+    const modeMenuBtn = document.getElementById('modeMenuBtn');
+    const modeMenu = document.getElementById('modeMenu');
+    const modeDropdown = document.getElementById('modeDropdown');
+    const modeMenuBtnOriginalClass = modeMenuBtn ? modeMenuBtn.className : '';
+    const selectBooksBtn = elements.selectBooksBtn;
+    if (modeMenuBtn && modeDropdown && modeMenu) {
+        modeMenuBtn.addEventListener('click', () => {
+            modeDropdown.classList.toggle('open');
+        });
+        modeMenu.querySelectorAll('.dropdown-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const mode = item.getAttribute('data-mode');
+                composeMode = mode === 'cross' ? 'cross' : 'single';
+                if (selectBooksBtn) selectBooksBtn.style.display = composeMode === 'cross' ? 'inline-flex' : 'none';
+                // 顶栏按钮高亮当前模式
+                if (modeMenuBtn) {
+                    if (composeMode === 'cross') {
+                        modeMenuBtn.classList.add('active');
+                    } else {
+                        modeMenuBtn.classList.remove('active');
+                    }
+                }
+                addMessage('system', composeMode === 'cross' ? '🧩 跨书模式已启用（请选择多本书）' : '📖 单书模式已启用');
+                modeDropdown.classList.remove('open');
+                // 切换后刷新书单高亮
+                listBooks();
+            });
+        });
+        document.addEventListener('click', (e) => {
+            if (!modeDropdown.contains(e.target)) modeDropdown.classList.remove('open');
+        });
+    }
+    if (selectBooksBtn) {
+        selectBooksBtn.addEventListener('click', showCrossBookSelector);
+    }
     
     // 模态框关闭
     const modalClose = document.querySelector('.modal-close');
@@ -1217,7 +1438,9 @@ document.addEventListener('DOMContentLoaded', function() {
             infoBtn: document.getElementById('infoBtn'),
             toolBtns: document.querySelectorAll('.tool-btn'),
             thinkingProcess: document.getElementById('thinkingProcess'),
-            thinkingSteps: document.getElementById('thinkingSteps')
+            thinkingSteps: document.getElementById('thinkingSteps'),
+            modeToggleBtn: document.getElementById('modeToggleBtn'),
+            selectBooksBtn: document.getElementById('selectBooksBtn')
         };
         
         console.log('🔍 关键元素检查:', {
@@ -1269,3 +1492,379 @@ window.switchBook = switchBook;
 window.useExample = useExample;
 window.toggleThinkingProcess = toggleThinkingProcess;
 window.clearChatHistory = clearChatHistory;
+window.polishLastAssistantMessage = polishLastAssistantMessage;
+window.polishMessageById = polishMessageById;
+window.critiqueMessageById = critiqueMessageById;
+
+// === 润色/点评逻辑 ===
+function getLastAssistantMessageWithIndex() {
+    for (let i = chatHistory.length - 1; i >= 0; i--) {
+        if (chatHistory[i].type === 'assistant' && chatHistory[i].content) {
+            return { msg: chatHistory[i], index: i };
+        }
+    }
+    return { msg: null, index: -1 };
+}
+
+function getPrevUserPrompt(beforeIndex) {
+    if (beforeIndex <= 0) return '';
+    for (let i = beforeIndex - 1; i >= 0; i--) {
+        const m = chatHistory[i];
+        if (m && m.type === 'user' && typeof m.content === 'string' && m.content.trim().length > 0) {
+            return m.content;
+        }
+    }
+    return '';
+}
+
+async function polishLastAssistantMessage() {
+    const { msg: last, index } = getLastAssistantMessageWithIndex();
+    if (!last) {
+        addMessage('system', '暂无可润色的回答，请先让AI生成一条回答。');
+        return;
+    }
+    const triggeringUserPrompt = getPrevUserPrompt(index);
+
+    // 追加一条“润色中”的消息
+    const polishMsgId = 'polish-' + Date.now();
+    const polishEl = renderMessage('assistant', '✨ 正在润色上一条回答...', null, polishMsgId);
+
+    // 组织历史为简单数组（复用已有 chatHistory）
+    const payload = {
+        draft: last.content,
+        history: chatHistory.slice(-10),
+        userPrompt: triggeringUserPrompt,
+        tone: 'neutral',
+        targetLength: 'original',
+        stream: true
+    };
+
+    try {
+        const controller = new AbortController();
+        const res = await fetch('/api/polish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`润色请求失败: ${res.status} ${text}`);
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let currentEvent = null;
+        let streamingText = '';
+
+        const textDiv = document.getElementById(polishMsgId)?.querySelector('.message-text');
+        if (textDiv) textDiv.innerHTML = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+
+            for (const line of lines) {
+                if (line.startsWith('event: ')) {
+                    currentEvent = line.slice(7);
+                } else if (line.startsWith('data: ') && currentEvent) {
+                    const data = line.slice(6);
+                    if (!data.trim()) continue;
+                    if (currentEvent === 'llm_token') {
+                        try {
+                            const { token } = JSON.parse(data);
+                            if (typeof token === 'string' && token.length > 0) {
+                                streamingText += token;
+                                if (textDiv) {
+                                    textDiv.innerHTML = formatMessage(streamingText);
+                                    elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+                                }
+                            }
+                        } catch {}
+                    } else if (currentEvent === 'final') {
+                        try {
+                            const { result } = JSON.parse(data);
+                            if (result && textDiv) {
+                                textDiv.innerHTML = formatMessage(result);
+                            }
+                            // 保存到历史
+                            chatHistory.push({
+                                type: 'assistant',
+                                content: result || streamingText,
+                                timestamp: new Date().toISOString(),
+                                id: polishMsgId,
+                                toolCalls: null
+                            });
+                            saveChatHistory();
+                        } catch {}
+                    }
+                } else if (line === '') {
+                    currentEvent = null;
+                }
+            }
+        }
+    } catch (err) {
+        console.error('润色失败:', err);
+        addMessage('system', '❌ 润色失败：' + err.message);
+    }
+}
+
+async function polishCurrentInput() {
+    const draft = elements.messageInput?.value?.trim();
+    if (!draft) {
+        addMessage('system', '请输入需要润色的文本');
+        return;
+    }
+    const polishMsgId = 'polish-' + Date.now();
+    const polishEl = renderMessage('assistant', '✨ 正在润色输入内容...', null, polishMsgId);
+
+    const payload = {
+        draft,
+        history: chatHistory.slice(-10),
+        tone: 'neutral',
+        targetLength: 'original',
+        stream: true
+    };
+    try {
+        const res = await fetch('/api/polish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+            const t = await res.text();
+            throw new Error(`润色请求失败: ${res.status} ${t}`);
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let currentEvent = null;
+        let streamingText = '';
+        const textDiv = document.getElementById(polishMsgId)?.querySelector('.message-text');
+        if (textDiv) textDiv.innerHTML = '';
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+            for (const line of lines) {
+                if (line.startsWith('event: ')) {
+                    currentEvent = line.slice(7);
+                } else if (line.startsWith('data: ') && currentEvent) {
+                    const data = line.slice(6);
+                    if (!data.trim()) continue;
+                    if (currentEvent === 'llm_token') {
+                        try {
+                            const { token } = JSON.parse(data);
+                            if (typeof token === 'string' && token.length > 0) {
+                                streamingText += token;
+                                if (textDiv) {
+                                    textDiv.innerHTML = formatMessage(streamingText);
+                                    elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+                                }
+                            }
+                        } catch {}
+                    } else if (currentEvent === 'final') {
+                        try {
+                            const { result } = JSON.parse(data);
+                            if (result && textDiv) textDiv.innerHTML = formatMessage(result);
+                            chatHistory.push({
+                                type: 'assistant',
+                                content: result || streamingText,
+                                timestamp: new Date().toISOString(),
+                                id: polishMsgId,
+                                toolCalls: null
+                            });
+                            saveChatHistory();
+                        } catch {}
+                    }
+                } else if (line === '') {
+                    currentEvent = null;
+                }
+            }
+        }
+    } catch (e) {
+        console.error('润色失败:', e);
+        addMessage('system', '❌ 润色失败：' + e.message);
+    }
+}
+
+// 根据消息ID执行润色：抓取该ID消息文本，以及其前一条用户prompt
+async function polishMessageById(targetId) {
+    const idx = chatHistory.findIndex(m => m.id === targetId);
+    if (idx === -1) {
+        addMessage('system', '找不到目标消息，无法润色');
+        return;
+    }
+    const draft = chatHistory[idx].content || '';
+    const userPrompt = getPrevUserPrompt(idx);
+    if (!draft) {
+        addMessage('system', '该回复为空，无法润色');
+        return;
+    }
+    const outId = 'polish-' + Date.now();
+    const el = renderMessage('assistant',
+        `<div class="magic-wrapper">
+            <div class="magic-loading">
+                <span class="magic-star"><i class="fas fa-star"></i></span>
+                <span class="magic-text">正在施展润色魔法，可能需要一点时间<span class="magic-dots"></span></span>
+            </div>
+            <div class="magic-stream" style="display:none;"></div>
+        </div>`,
+        null,
+        outId
+    );
+    await streamPolish({ draft, userPrompt, outId });
+}
+
+// 修改意见（点评）按钮：针对某条回复输出详细改进建议
+async function critiqueMessageById(targetId) {
+    const idx = chatHistory.findIndex(m => m.id === targetId);
+    if (idx === -1) {
+        addMessage('system', '找不到目标消息，无法给出建议');
+        return;
+    }
+    const text = chatHistory[idx].content || '';
+    const userPrompt = getPrevUserPrompt(idx);
+    if (!text) {
+        addMessage('system', '该回复为空，无法给出建议');
+        return;
+    }
+    const outId = 'critique-' + Date.now();
+    const el = renderMessage('assistant',
+        `<div class="magic-wrapper">
+            <div class="magic-loading">
+                <span class="magic-star"><i class="fas fa-star"></i></span>
+                <span class="magic-text">正在施展点评魔法，可能需要一点时间<span class="magic-dots"></span></span>
+            </div>
+            <div class="magic-stream" style="display:none;"></div>
+        </div>`,
+        null,
+        outId
+    );
+    await streamCritique({ text, userPrompt, outId });
+}
+
+// 封装：以SSE流式调用 /api/polish
+async function streamPolish({ draft, userPrompt = '', outId }) {
+    const payload = {
+        draft,
+        userPrompt,
+        history: chatHistory.slice(-10),
+        tone: 'neutral',
+        targetLength: 'original',
+        stream: true
+    };
+    await sseToMessage({ url: '/api/polish', payload, outId });
+}
+
+// 封装：以SSE流式调用 /api/critique
+async function streamCritique({ text, userPrompt = '', outId }) {
+    const payload = {
+        text,
+        userPrompt,
+        history: chatHistory.slice(-10),
+        stream: true
+    };
+    await sseToMessage({ url: '/api/critique', payload, outId });
+}
+
+// 通用SSE到消息渲染
+async function sseToMessage({ url, payload, outId }) {
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+            const t = await res.text();
+            throw new Error(`${url} 请求失败: ${res.status} ${t}`);
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let currentEvent = null;
+        let streamingText = '';
+        const wrapper = document.getElementById(outId)?.querySelector('.message-text');
+        let streamDiv = null;
+        let loadingDiv = null;
+        if (wrapper) {
+            // 使用占位结构：magic-wrapper > magic-loading + magic-stream
+            const w = wrapper.querySelector('.magic-wrapper');
+            if (w) {
+                loadingDiv = w.querySelector('.magic-loading');
+                streamDiv = w.querySelector('.magic-stream');
+            }
+        }
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+            for (const line of lines) {
+                if (line.startsWith('event: ')) {
+                    currentEvent = line.slice(7);
+                } else if (line.startsWith('data: ') && currentEvent) {
+                    const data = line.slice(6);
+                    if (!data.trim()) continue;
+                    if (currentEvent === 'llm_token') {
+                        try {
+                            const { token } = JSON.parse(data);
+                            if (typeof token === 'string' && token.length > 0) {
+                                streamingText += token;
+                                if (wrapper) {
+                                    if (loadingDiv && streamDiv && streamDiv.style.display === 'none') {
+                                        // 首次收到token：显示正文区域，隐藏加载动画
+                                        loadingDiv.style.display = 'none';
+                                        streamDiv.style.display = 'block';
+                                    }
+                                    if (streamDiv) {
+                                        streamDiv.innerHTML = formatMessage(streamingText);
+                                        elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+                                    }
+                                }
+                            }
+                        } catch {}
+                    } else if (currentEvent === 'final') {
+                        try {
+                            const obj = JSON.parse(data);
+                            const finalText = obj.result || obj.critique || streamingText;
+                            if (wrapper) {
+                                if (loadingDiv) loadingDiv.style.display = 'none';
+                                if (streamDiv) {
+                                    streamDiv.style.display = 'block';
+                                    streamDiv.innerHTML = formatMessage(finalText);
+                                } else {
+                                    wrapper.innerHTML = formatMessage(finalText);
+                                }
+                            }
+                            chatHistory.push({
+                                type: 'assistant',
+                                content: finalText,
+                                timestamp: new Date().toISOString(),
+                                id: outId,
+                                toolCalls: null
+                            });
+                            saveChatHistory();
+                        } catch {}
+                    }
+                } else if (line === '') {
+                    currentEvent = null;
+                }
+            }
+        }
+    } catch (e) {
+        console.error('SSE失败:', e);
+        addMessage('system', '❌ 请求失败：' + e.message);
+    }
+}

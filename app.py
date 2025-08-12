@@ -8,6 +8,8 @@ import threading
 import time
 import uuid
 from langchain_agent import GraphAnalysisAgent
+from polish_agent import create_polish_agent
+from cross_book_agent import create_cross_langchain_agent
 from langchain.callbacks.base import BaseCallbackHandler
 from typing import Any, Dict, List
 from langchain_core.agents import AgentAction, AgentFinish
@@ -18,6 +20,8 @@ CORS(app)  # 允许跨域请求
 # 全局变量
 graph_agent = None
 graph_agent_instance = None  # 保存 GraphAnalysisAgent 实例的引用
+polish_agent = None          # 独立润色 Agent
+cross_agent = None           # 跨书创作 Agent
 
 # 线程安全的回调消息队列
 callback_queue = queue.Queue()
@@ -176,6 +180,13 @@ def initialize_agent():
         from langchain_agent import create_graphrag_agent
         graph_agent = create_graphrag_agent(graph_agent_instance)
         graph_agent_instance = graph_agent_instance  # 保存引用
+
+        # 初始化独立润色Agent
+        global polish_agent
+        polish_agent = create_polish_agent()
+        # 初始化跨书Agent
+        global cross_agent
+        cross_agent = create_cross_langchain_agent()
         
         print("✅ 代理初始化成功")
         return True
@@ -219,6 +230,22 @@ def chat():
             elif msg['type'] == 'assistant':
                 chat_history.append(f"助手: {msg['content']}")
         
+        # 解析当前书本（优先以后端实际选择为准）
+        try:
+            backend_current_book = graph_agent_instance.get_current_book() if hasattr(graph_agent_instance, 'get_current_book') else None
+        except Exception:
+            backend_current_book = None
+        effective_current_book = backend_current_book or current_book
+
+        # 将当前书本显式注入到Agent输入，避免“这本书”歧义
+        message_for_agent = message
+        if effective_current_book:
+            message_for_agent = (
+                f"【当前书本】{effective_current_book}\n"
+                f"【任务】请基于当前书本回答下述问题；若用户提到‘这本书’，默认指当前书本。\n"
+                f"【用户问题】{message}"
+            )
+
         if stream:
             # 流式响应（SSE）
             def generate():
@@ -246,7 +273,7 @@ def chat():
                             print(f"🤖 开始执行代理: {message}")
                             resp = loop.run_until_complete(
                                 graph_agent.ainvoke(
-                                    {"input": message, "chat_history": chat_history},
+                                    {"input": message_for_agent, "chat_history": chat_history},
                                     config={"callbacks": [callback_handler]}
                                 )
                             )
@@ -309,7 +336,7 @@ def chat():
 
                     final_payload = {
                         'response': output,
-                        'currentBook': graph_agent_instance.get_current_book() if hasattr(graph_agent_instance, 'get_current_book') else current_book,
+                        'currentBook': effective_current_book,
                         'needBookSelection': ("需要选择书本" in output) or ("请先选择" in output),
                         'intermediate': intermediate
                     }
@@ -338,7 +365,7 @@ def chat():
             
             try:
                 response = loop.run_until_complete(graph_agent.ainvoke({
-                    "input": message,
+                    "input": message_for_agent,
                     "chat_history": chat_history
                 }))
                 steps = []
@@ -369,7 +396,7 @@ def chat():
                 
                 return jsonify({
                     'response': output,
-                    'currentBook': graph_agent_instance.get_current_book() if hasattr(graph_agent_instance, 'get_current_book') else current_book,
+                    'currentBook': effective_current_book,
                     'toolCalls': []
                 })
                 
@@ -378,6 +405,136 @@ def chat():
             
     except Exception as e:
         print(f"聊天API错误: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/polish', methods=['POST'])
+def api_polish():
+    """润色API：根据草稿与历史对话进行润色，支持SSE流式输出。"""
+    try:
+        data = request.get_json(silent=True) or {}
+        draft = data.get('draft', '')
+        history = data.get('history', [])  # 可为字符串或消息数组
+        user_prompt = data.get('userPrompt', '')
+        tone = data.get('tone', 'neutral')
+        target_length = data.get('targetLength', 'original')
+        stream = data.get('stream', True)
+
+        if not draft:
+            return jsonify({'error': 'draft不能为空'}), 400
+
+        # 归一化历史为纯文本
+        if isinstance(history, list):
+            history_text = []
+            for msg in history[-10:]:
+                role = msg.get('type') or msg.get('role')
+                content = msg.get('content', '')
+                if role == 'user':
+                    history_text.append(f"用户: {content}")
+                elif role in ('assistant', 'ai'):
+                    history_text.append(f"助手: {content}")
+            history_text = "\n".join(history_text)
+        else:
+            history_text = str(history or '')
+
+        if not stream:
+            # 非流式：直接返回润色结果
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(
+                    polish_agent.polish_async(
+                        draft=draft,
+                        chat_history_text=history_text,
+                        user_prompt=user_prompt,
+                        tone=tone,
+                        target_length=target_length,
+                    )
+                )
+                return jsonify({'result': result})
+            finally:
+                loop.close()
+
+        # 流式：使用SSE返回token与最终结果
+        def generate():
+            try:
+                yield "event: status\n"
+                yield f"data: {json.dumps({'status': '开始润色...'}, ensure_ascii=False)}\n\n"
+
+                callback_q = queue.Queue()
+
+                class PolishStreamingHandler(BaseCallbackHandler):
+                    def __init__(self, yield_fn):
+                        self.yield_fn = yield_fn
+                    def on_llm_start(self, serialized, prompts, **kwargs):
+                        self.yield_fn(f"event: llm_start\ndata: {json.dumps({'model': serialized.get('name','llm')}, ensure_ascii=False)}\n\n")
+                    def on_llm_new_token(self, token: str, **kwargs):
+                        # 发送token，实现真流式
+                        self.yield_fn(f"event: llm_token\ndata: {json.dumps({'token': token}, ensure_ascii=False)}\n\n")
+                    def on_llm_end(self, response, **kwargs):
+                        # 发送一个空对象，表示该段token流结束
+                        self.yield_fn("event: llm_end\n")
+                        self.yield_fn("data: {}\n\n")
+
+                def q_yield(sse_chunk: str):
+                    callback_q.put(sse_chunk)
+
+                handler = PolishStreamingHandler(q_yield)
+
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                async def run_polish():
+                    from langchain_core.messages import SystemMessage, HumanMessage
+                    system_rules = (
+                        "你是一个中文写作润色助手，提升清晰度、结构性与一致性，不改变事实与核心含义。\n"
+                        "- 修正语法/用词/标点/格式\n"
+                        "- 优化逻辑与段落衔接\n"
+                        "- 提升可读性与专业性，避免冗余\n"
+                        "- 保留关键信息与术语，不编造内容\n"
+                        f"- 目标语气: {tone}；长度策略: {target_length}"
+                    )
+                    hist_part = f"\n\n[对话历史]\n{history_text}" if history_text else ""
+                    requirement_part = f"\n\n[用户需求（必须严格满足）]\n{user_prompt}" if user_prompt else ""
+                    prompt = (
+                        "请先对照[用户需求]检查草稿是否完全符合要求（题材、风格、结构、长度、禁忌等）。若存在不符合或遗漏，请在润色时一并修正；否则在保持含义不变的前提下优化表达。\n"
+                        "仅输出润色后的最终文本，不要输出解释或打分。\n\n"
+                        f"[草稿]\n{draft}{hist_part}{requirement_part}"
+                    )
+                    messages = [SystemMessage(content=system_rules), HumanMessage(content=prompt)]
+
+                    # 直接使用独立llm（带回调）进行流式生成
+                    resp = await polish_agent.llm_polish.ainvoke(messages, config={"callbacks": [handler]})
+                    return resp.content if hasattr(resp, 'content') else str(resp)
+
+                result_text = loop.run_until_complete(run_polish())
+
+                # 转发队列中的SSE片段
+                while not callback_q.empty():
+                    yield callback_q.get()
+
+                # 最终结果
+                yield "event: final\n"
+                yield f"data: {json.dumps({'result': result_text}, ensure_ascii=False)}\n\n"
+                yield "event: done\n"
+                yield "data: {}\n\n"
+
+            except Exception as e:
+                yield "event: error\n"
+                yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+        return app.response_class(
+            generate(),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'X-Accel-Buffering': 'no'
+            }
+        )
+
+    except Exception as e:
+        print(f"润色API错误: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/books', methods=['GET'])
@@ -417,6 +574,15 @@ def switch_book():
         
         if hasattr(graph_agent_instance, 'switch_book'):
             graph_agent_instance.switch_book(book_name)
+            # 重置Agent对话记忆并重建执行器，避免跨书本串扰
+            try:
+                from langchain_agent import create_graphrag_agent, memory
+                memory.clear()
+                global graph_agent
+                graph_agent = create_graphrag_agent(graph_agent_instance)
+                print(f"🔄 已重建Agent执行器并清空记忆，当前书本: {book_name}")
+            except Exception as e:
+                print(f"⚠️ 重建Agent或清空记忆失败: {e}")
             return jsonify({'success': True, 'currentBook': book_name})
         else:
             return jsonify({'error': '切换书本功能不可用'}), 500
@@ -468,6 +634,260 @@ def health_check():
         'agent_initialized': graph_agent is not None
     })
 
+@app.route('/api/cross-chat', methods=['POST'])
+def cross_chat():
+    """跨书创作（SSE）：不改变currentBook，按所选书本并行检索并生成。"""
+    try:
+        data = request.get_json(silent=True) or {}
+        books = data.get('books', [])
+        prompt = data.get('message', '') or data.get('prompt', '')
+        history = data.get('history', [])
+        mode = data.get('mode', 'both')
+        topk = int(data.get('topK', 5))
+        if not isinstance(books, list) or len(books) == 0:
+            return jsonify({'error': '请至少选择一本书'}), 400
+        if not prompt:
+            return jsonify({'error': 'prompt不能为空'}), 400
+
+        def generate():
+            try:
+                yield "event: status\n"
+                yield f"data: {json.dumps({'status':'开始并行检索上下文...'}, ensure_ascii=False)}\n\n"
+
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                # 通过子Agent执行原工具链，逐书发工具事件
+                sse_queue = queue.Queue()
+                def sse_emit(evt, payload):
+                    sse_queue.put(f"event: {evt}\n" + f"data: {json.dumps(payload, ensure_ascii=False)}\n\n")
+
+                from cross_book_agent import CrossOrchestrator
+                orchestrator = CrossOrchestrator(sse_emit)
+
+                # 回调handler工厂：重用现有 StreamingCallbackHandler 以推送 llm/tool 事件
+                def handler_factory_for_book(book_label: str):
+                    def yield_with_book(s: str):
+                        try:
+                            if s.startswith("event:"):
+                                # inject book into data json
+                                parts = s.split("\n")
+                                if len(parts) >= 2 and parts[1].startswith("data: "):
+                                    et = parts[0][7:].strip()
+                                    raw = parts[1][6:]
+                                    payload = json.loads(raw)
+                                    if isinstance(payload, dict):
+                                        payload['book'] = book_label
+                                        s_mod = f"event: {et}\n" + f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                                        sse_queue.put(s_mod)
+                                        return
+                        except Exception:
+                            pass
+                        sse_queue.put(s)
+                    return StreamingCallbackHandler(yield_with_book)
+
+                # 为每本书创建带book标记的回调handler
+                def cb_factory_picker(book_name: str):
+                    return lambda: handler_factory_for_book(book_name)
+
+                # 运行并发子代理
+                async def run_all():
+                    from cross_book_agent import CrossOrchestrator
+                    orch = orchestrator
+                    tasks = []
+                    for b in books:
+                        tasks.append(orch._run_one_book_agent(b, prompt, history or [], cb_factory_picker(b)))
+                    return await asyncio.gather(*tasks)
+
+                contexts = loop.run_until_complete(run_all())
+
+                # 转发检索期事件
+                while not sse_queue.empty():
+                    yield sse_queue.get()
+
+                # 构造生成消息（融合）
+                messages = cross_agent.build_messages(contexts, prompt)
+
+                # 流式生成
+                class CrossStreamHandler(BaseCallbackHandler):
+                    def __init__(self, yield_fn):
+                        self.yield_fn = yield_fn
+                    def on_llm_start(self, serialized, prompts, **kwargs):
+                        self.yield_fn(f"event: llm_start\ndata: {json.dumps({'model': serialized.get('name','llm')}, ensure_ascii=False)}\n\n")
+                    def on_llm_new_token(self, token: str, **kwargs):
+                        self.yield_fn(f"event: llm_token\ndata: {json.dumps({'token': token}, ensure_ascii=False)}\n\n")
+                    def on_llm_end(self, response, **kwargs):
+                        self.yield_fn("event: llm_end\n")
+                        self.yield_fn("data: {}\n\n")
+
+                handler = CrossStreamHandler(lambda s: None)
+
+                async def run_gen():
+                    resp = await cross_agent.llm_gen.ainvoke(messages, config={"callbacks": [handler]})
+                    return resp.content if hasattr(resp, 'content') else str(resp)
+
+                # 通过回调直接yieldsse：重写yield函数（实时推送到队列）
+                output_queue = queue.Queue()
+                def sse_yield(s):
+                    output_queue.put(s)
+
+                # 替换handler的yield_fn
+                handler.yield_fn = sse_yield
+
+                final_holder = {"text": None, "error": None}
+
+                # 在后台线程执行生成，主线程持续从队列取事件并向前端推送
+                def run_gen_thread():
+                    try:
+                        result = loop.run_until_complete(run_gen())
+                        final_holder["text"] = result
+                    except Exception as ge:
+                        final_holder["error"] = str(ge)
+
+                gen_thread = threading.Thread(target=run_gen_thread, daemon=True)
+                gen_thread.start()
+
+                # 实时转发回调输出
+                while True:
+                    try:
+                        chunk = output_queue.get(timeout=0.1)
+                        yield chunk
+                    except queue.Empty:
+                        if not gen_thread.is_alive():
+                            break
+                        continue
+
+                gen_thread.join()
+
+                # 收尾
+                if final_holder["error"]:
+                    yield "event: error\n"
+                    yield f"data: {json.dumps({'error': final_holder['error']}, ensure_ascii=False)}\n\n"
+                else:
+                    yield "event: final\n"
+                    yield f"data: {json.dumps({'response': final_holder['text'] or ''}, ensure_ascii=False)}\n\n"
+                yield "event: done\n"
+                yield "data: {}\n\n"
+            except Exception as e:
+                yield "event: error\n"
+                yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+        return app.response_class(
+            generate(),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'X-Accel-Buffering': 'no'
+            }
+        )
+    except Exception as e:
+        print(f"跨书创作API错误: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/critique', methods=['POST'])
+def api_critique():
+    """点评API：根据文本与用户需求给出修改意见（SSE流式）。"""
+    try:
+        data = request.get_json(silent=True) or {}
+        text = data.get('text', '')
+        history = data.get('history', [])
+        user_prompt = data.get('userPrompt', '')
+        stream = data.get('stream', True)
+
+        if not text:
+            return jsonify({'error': 'text不能为空'}), 400
+
+        # 历史归一化
+        if isinstance(history, list):
+            history_text = []
+            for msg in history[-10:]:
+                role = msg.get('type') or msg.get('role')
+                content = msg.get('content', '')
+                if role == 'user':
+                    history_text.append(f"用户: {content}")
+                elif role in ('assistant', 'ai'):
+                    history_text.append(f"助手: {content}")
+            history_text = "\n".join(history_text)
+        else:
+            history_text = str(history or '')
+
+        if not stream:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(
+                    polish_agent.critique_async(
+                        text=text,
+                        chat_history_text=history_text,
+                        criteria=f"严格对照用户需求：{user_prompt}，指出不符合点并给出简洁修改建议",
+                    )
+                )
+                return jsonify({'critique': result})
+            finally:
+                loop.close()
+
+        def generate():
+            try:
+                yield "event: status\n"
+                yield f"data: {json.dumps({'status': '开始生成修改意见...'}, ensure_ascii=False)}\n\n"
+
+                callback_q = queue.Queue()
+                class CritiqueStreamingHandler(BaseCallbackHandler):
+                    def __init__(self, yield_fn):
+                        self.yield_fn = yield_fn
+                    def on_llm_new_token(self, token: str, **kwargs):
+                        self.yield_fn(f"event: llm_token\ndata: {json.dumps({'token': token}, ensure_ascii=False)}\n\n")
+
+                def q_yield(sse_chunk: str):
+                    callback_q.put(sse_chunk)
+
+                handler = CritiqueStreamingHandler(q_yield)
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                async def run_critique():
+                    from langchain_core.messages import SystemMessage, HumanMessage
+                    system_rules = (
+                        "你是一个严谨的中文文本点评助手。\n"
+                        "- 从清晰度、结构性、语气一致性、事实保真、与用户需求一致性等维度评估\n"
+                        "- 指出具体可改进之处，并给出简短修改建议\n"
+                        "- 不编造内容，不加入无根据的信息"
+                    )
+                    hist_part = f"\n\n[对话历史]\n{history_text}" if history_text else ""
+                    requirement = f"\n\n[用户需求（必须严格满足）]\n{user_prompt}" if user_prompt else ""
+                    prompt = (
+                        "请严格对照[用户需求]点评下述文本，列出不符合点与改进建议要点；若完全符合，也请简述优化空间。\n"
+                        "仅输出点评内容，不要复述原文。\n\n"
+                        f"[文本]\n{text}{hist_part}{requirement}"
+                    )
+                    messages = [SystemMessage(content=system_rules), HumanMessage(content=prompt)]
+                    resp = await polish_agent.llm_polish.ainvoke(messages, config={"callbacks": [handler]})
+                    return resp.content if hasattr(resp, 'content') else str(resp)
+
+                critique_text = loop.run_until_complete(run_critique())
+                while not callback_q.empty():
+                    yield callback_q.get()
+                yield "event: final\n"
+                yield f"data: {json.dumps({'critique': critique_text}, ensure_ascii=False)}\n\n"
+                yield "event: done\n"
+                yield "data: {}\n\n"
+            except Exception as e:
+                yield "event: error\n"
+                yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+        return app.response_class(
+            generate(),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'X-Accel-Buffering': 'no'
+            }
+        )
+    except Exception as e:
+        print(f"点评API错误: {e}")
+        return jsonify({'error': str(e)}), 500
 if __name__ == '__main__':
     print("🚀 启动智能创作助手...")
     

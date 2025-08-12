@@ -345,7 +345,7 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
             "current_book": current_book,
             "success": True
         }, ensure_ascii=False)
-
+    
     # === 新增：RAG检索分离工具 ===
     @tool
     async def global_search_retrieve_tool(query: str) -> str:
@@ -869,13 +869,13 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
             
         except Exception as e:
             print(f"❌ [分块分析] 整体失败: {e}")
-            return json.dumps({
+        return json.dumps({
                 "method": "parallel_chunk_analysis",
                 "error": str(e),
                 "success": False
-            }, ensure_ascii=False, default=str)
+        }, ensure_ascii=False, default=str)
     
-    @tool
+    @tool 
     async def summary_chunk_results_tool(chunk_analysis_results: str, query: str, summary_focus: str = "comprehensive") -> str:
         """
         对分块分析结果进行总结（支持大量分块，自动处理上下文限制）
@@ -1174,7 +1174,6 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
             }
             
             return json.dumps(result, ensure_ascii=False, default=str)
-            
         except Exception as e:
             print(f"❌ [结果总结] 总结失败: {e}")
             return json.dumps({
@@ -1386,7 +1385,7 @@ async def main() -> None:
             print("\n--- Agent 回答 ---")
             print(response.get("output"))
             print("--------------------\n")
-            
+                
         except Exception as e:
             print(f"发生错误：{e}")
             break

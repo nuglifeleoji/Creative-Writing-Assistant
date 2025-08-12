@@ -2,13 +2,18 @@ def build_guidelines() -> str:
     return """\
 # 工具使用与决策准则
 
-## 1) 工具总览
-- **local_search（低粒度）**
-  - 适配：实体/关系/局部事实类问题；需要精确片段、出处、段落级证据。
-  - 输出关注：命中的证据块（带原文短摘）、来源定位（章节/页码/段落ID）。
-- **global_search（高粒度）**
-  - 适配：主题/背景/全局综合类问题；需要跨章节聚合与长距离依赖。
-  - 输出关注：主题脉络、关键事件时间线、互证的多点摘要。
+## 1) 核心工具流程
+- **重要：当任何搜索工具返回包含"serial_chunk_analysis_tool"的note时，必须立即调用serial_chunk_analysis_tool进行分块分析**
+- **global_search + parallel_chunk_analysis_tool（完整分析流程）**
+  - 步骤1：global_search获取检索结果
+  - 步骤2：如果note提示使用parallel_chunk_analysis_tool，可以考虑调用该工具进行分块分析
+  - 适配：主题/背景/全局综合类问题；需要跨章节聚合与长距离依赖
+- **local_search + parallel_chunk_analysis_tool（完整分析流程）**
+  - 步骤1：local_search获取检索结果
+  - 步骤2：如果note提示使用parallel_chunk_analysis_tool，可以考虑调用该工具进行分块分析
+  - 适配：实体/关系/局部事实类问题；需要精确片段、出处、段落级证据
+
+## 2) 专门工具（可直接使用）
 - **get_characters / get_character_profile（人物清单与画像）**
   - 适配：人物列表、人物卡、关系图谱、弧线（arc）抽取与对齐。
 - **get_important_locations（地点清单）**
@@ -101,31 +106,13 @@ def build_response_format() -> str:
 # 响应格式
 严格使用中文回答！！！
 
-## 1) 处理中（IN_PROGRES / NEED_CLARIFICATION）
-```markdown
-status_update: IN_PROGRES
-thought:
-- 本轮先 global_search 抽主线，再 local_search 验证
-plan:
-- Step1: global_search {query: "..."}
-- Step2: get_characters {need_relations: true}
-tools:
-- name: global_search
-  result_summary:
-    - point: "主题A 概述"
-    - cite: source_id=G1, snippet="……"
-provisional_takeaways:
-- 主题A 可能为“xxx”（证据：G1）
-next_actions:
-- local_search 针对人物B关键抉择片段
-
-## 2) 完成（DONE）
+## 1) 完成（DONE）
 在总结书中信息时可以分条叙述：
 **...**: ...
 **...**: ...
 在进行二次创作时以段落方式呈现，且尽量具体和详细，类似小说的写法，不必分条。
 
-##3) 超预算终止（BUDGET_EXCEEDED）
+##2) 超预算终止（BUDGET_EXCEEDED）
 status_update: BUDGET_EXCEEDED
 what_we_have:
 - 已确认主题与三名主要人物画像
@@ -134,7 +121,7 @@ what_is_missing:
 next_plan_if_approved:
 - 追加 2 次 local_search 限定相关章节
 
-##4) 需要澄清（NEED_CLARIFICATION）
+##3) 需要澄清（NEED_CLARIFICATION）
 status_update: NEED_CLARIFICATION
 clarify_questions:
 - 你要聚焦原著的哪个版本？

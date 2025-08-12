@@ -1195,12 +1195,12 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         local_search_generate_tool,
         
         #=== 新增：独立LLM调用工具 ===
-        llm_generate_tool,
-        llm_analyze_tool,
+        # llm_generate_tool,
+        # llm_analyze_tool,
         
         #=== 新增：分块处理工具 ===
-        parallel_chunk_analysis_tool,
-        summary_chunk_results_tool,
+        # parallel_chunk_analysis_tool,
+        # summary_chunk_results_tool,
         
         # === 原有工具 ===
         get_characters_tool,

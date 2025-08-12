@@ -84,7 +84,7 @@ class RAGEngine:
         # )
 
         self.embedding_config = LanguageModelConfig(
-                        type=ModelType.AzureOpenAIChat,
+            type=ModelType.AzureOpenAIEmbedding,
             api_base="https://tcamp.openai.azure.com/",
             api_version="2023-05-15",
             auth_type="api_key",
@@ -146,7 +146,7 @@ class RAGEngine:
         )
         self.text_embedder = self.model_manager.get_or_create_embedding_model(
             name="rag_engine_embedding",
-            model_type=ModelType.OpenAIEmbedding,
+            model_type=ModelType.AzureOpenAIEmbedding,
             config=self.embedding_config,
         )
         

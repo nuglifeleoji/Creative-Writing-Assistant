@@ -1316,7 +1316,13 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
     agent = create_tool_calling_agent(llm=llm, tools=tools, prompt=final_prompt)
 
     # 创建 Agent 执行器
-    return AgentExecutor(agent=agent, tools=tools, memory=memory, verbose=True)
+    return AgentExecutor(
+        agent=agent, 
+        tools=tools, 
+        memory=memory, 
+        verbose=True,
+        return_intermediate_steps=True  # 新增：启用中间步骤记录
+    )
 
 import os
 import json
@@ -1608,22 +1614,27 @@ class InteractiveDialogueSystem:
         max_turns = random.randint(3, 5)
         
         for turn in range(max_turns):
-            # 获取回答
-            answer_data = await self.agent_executor.ainvoke({
+            # 获取回答（同时捕获中间步骤）
+            # 修改调用方式以获取中间步骤
+            result = await self.agent_executor.ainvoke({
                 "input": current_question
             })
             
+            # 提取回答和工具调用步骤
+            answer = result.get("output", "")
+            tool_steps = result.get("intermediate_steps", [])
+            
             # 显示回答
             print("\n--- Agent 回答 ---")
-            print(answer_data.get("output"))
+            print(answer)
             print("--------------------\n")
-            answer = answer_data.get("output")
             
-            # 存储当前轮次
+            # 存储当前轮次（增加 tool_calls）
             conversation.append({
                 "turn": turn,
                 "question": current_question,
-                "answer": answer
+                "answer": answer,
+                "tool_calls": self._process_tool_steps(tool_steps)  # 新增：处理工具调用
             })
             
             # 如果是最后一轮则停止
@@ -1641,8 +1652,30 @@ class InteractiveDialogueSystem:
         self.store_conversation(topic, conversation)
         print(f"✅ 主题 '{topic}' 完成 | 轮次: {len(conversation)}")
     
+    def _process_tool_steps(self, steps: list) -> list:
+        """处理工具调用步骤，提取关键信息"""
+        processed = []
+        for step in steps:
+            action, result = step
+            tool_name = action.tool if hasattr(action, 'tool') else "Unknown"
+            tool_input = action.tool_input if hasattr(action, 'tool_input') else {}
+            
+            # 处理工具输出（避免存储过大内容）
+            output = result
+            if isinstance(output, str) and len(output) > 500:
+                output = output[:497] + "..."
+            elif isinstance(output, dict):
+                output = {k: v for k, v in output.items() if k != "full_details"}
+            
+            processed.append({
+                "tool": tool_name,
+                "input": tool_input,
+                "output": output,
+                "log": action.log if hasattr(action, 'log') else ""
+            })
+        return processed
     def store_conversation(self, topic: str, conversation: list):
-        """存储对话到内存数据集"""
+        """存储对话到内存数据集（增加 tool_calls 字段）"""
         self.dialogues.append({
             "session": f"{self.session_id}_{len(self.dialogues)+1}",
             "topic": topic,
@@ -1708,7 +1741,7 @@ async def main():
     dialogue_system = InteractiveDialogueSystem(graph_agent)
     
     # 4. 执行多个主题的对话
-    num_conversations = 5
+    num_conversations = 10
     print(f"\n🚀 开始生成 {num_conversations} 个主题的多轮对话...")
     
     for i in range(num_conversations):

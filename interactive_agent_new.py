@@ -1338,13 +1338,13 @@ class DuneTopicGenerator:
         # 角色：科幻小说专家，专注《沙丘》系列
         # 任务：生成与《沙丘》相关的多样化主题和起始问题
         # 要求：
-        # 1. 主题必须是《沙丘》小说相关的核心领域
-        #    - 世界观设定 (如：香料经济学、弗瑞曼文化)
-        #    - 人物关系 (如：厄崔迪与哈克南家族的恩怨)
-        #    - 关键情节 (如：保罗成为穆阿迪布的旅程)
-        #    - 哲学主题 (如：权力、预知能力或生态责任感)
-        #    - 技术创新 (如：防护罩、悬浮车)
-        #    - 未解之谜 (如：贝尼·杰瑟里特的长远计划)
+        # 1. 主题必须是《沙丘》小说相关的核心领域，需要随机性足够强
+        #    - 世界观设定 5%
+        #    - 人物关系 15%
+        #    - 关键情节 25%
+        #    - 悬念与伏笔 20% 
+        #    - 人物情感曲线 10% 
+        #    - 二创小说 25% 
         # 2. 严格使用以下JSON格式：
         {{"topic": "主题名称", "question": "起始问题"}}
         # 3. 主题必须能支持多轮对话
@@ -1357,7 +1357,7 @@ class DuneTopicGenerator:
             model_name="gpt-4o",
             openai_api_key=api_key,
             azure_endpoint="https://tcamp.openai.azure.com/",
-            temperature=0.85,
+            temperature=1.2,
             max_tokens=800
         )
     
@@ -1708,7 +1708,7 @@ async def main():
     dialogue_system = InteractiveDialogueSystem(graph_agent)
     
     # 4. 执行多个主题的对话
-    num_conversations = 7
+    num_conversations = 5
     print(f"\n🚀 开始生成 {num_conversations} 个主题的多轮对话...")
     
     for i in range(num_conversations):

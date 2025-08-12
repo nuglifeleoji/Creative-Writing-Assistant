@@ -198,5 +198,3 @@ class CrossOrchestrator:
 
 def create_cross_langchain_agent() -> CrossLangChainAgent:
     return CrossLangChainAgent()
-
-

@@ -22,7 +22,7 @@ from langchain import hub
 from langchain_openai import ChatOpenAI,AzureChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
-from search.rag_engine import rag_engine, multi_book_manager, RAGEngine
+from search.quick_engine import rag_engine, multi_book_manager, RAGEngine
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 import prompt_utils
 import prompt
@@ -1330,6 +1330,7 @@ async def main() -> None:
         ("book4", "./book4/output"),
         ("book5", "./book5/output"), 
         ("book6", "./book6/output"),
+        ("book2", "./rag_book2/ragtest/output"),
         ("tencent", "./tencent/output"),
         ("default", "./rag/output"),  # 默认的rag/output
         ("sanguo","./sanguo/output")

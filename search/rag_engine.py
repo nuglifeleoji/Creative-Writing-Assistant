@@ -67,7 +67,7 @@ class RAGEngine:
             requests_per_minute=100,
             encoding_model="cl100k_base",
         )
-
+        
 
         
         # self.embedding_config = LanguageModelConfig(

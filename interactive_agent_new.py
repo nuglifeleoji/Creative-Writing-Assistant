@@ -1195,12 +1195,12 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         local_search_generate_tool,
         
         #=== 新增：独立LLM调用工具 ===
-        llm_generate_tool,
-        llm_analyze_tool,
+        # llm_generate_tool,
+        # llm_analyze_tool,
         
         #=== 新增：分块处理工具 ===
-        parallel_chunk_analysis_tool,
-        summary_chunk_results_tool,
+        # parallel_chunk_analysis_tool,
+        # summary_chunk_results_tool,
         
         # === 原有工具 ===
         get_characters_tool,
@@ -1708,7 +1708,7 @@ async def main():
     dialogue_system = InteractiveDialogueSystem(graph_agent)
     
     # 4. 执行多个主题的对话
-    num_conversations = 1
+    num_conversations = 7
     print(f"\n🚀 开始生成 {num_conversations} 个主题的多轮对话...")
     
     for i in range(num_conversations):
@@ -1719,7 +1719,6 @@ async def main():
             print("="*50)
     
     # 5. 打印统计报告并保存结果
-    dialogue_system.print_stats_report()
     dialogue_system.save_to_jsonl()
     print("✅ 所有对话完成并保存！")
 

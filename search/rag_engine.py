@@ -173,7 +173,7 @@ class RAGEngine:
             "include_community_weight": True,
             "community_weight_name": "occurrence weight",
             "normalize_community_weight": True,
-            "max_tokens": 6000,  # 从10000减少到6000以减少检索内容
+            "max_tokens": 4000,  # 再次收缩，降低超长上下文概率
             "context_name": "Reports",
         }
         
@@ -229,7 +229,7 @@ class RAGEngine:
             "include_community_rank": False,
             "return_candidate_context": False,
             "embedding_vectorstore_key": EntityVectorStoreKey.ID,
-            "max_tokens": 6000,  # 从10000减少到6000以减少检索内容
+            "max_tokens": 3500,  # 再次收缩
         }
         
         self.local_model_params = {
@@ -259,7 +259,7 @@ class RAGEngine:
         truncated_tokens = tokens[:max_tokens]
         return self.token_encoder.decode(truncated_tokens)
     
-    def _chunk_text(self, text: str, max_tokens_per_chunk: int = 8000, overlap_tokens: int = 500) -> List[Dict[str, Any]]:
+    def _chunk_text(self, text: str, max_tokens_per_chunk: int = 6000, overlap_tokens: int = 300) -> List[Dict[str, Any]]:
         """
         将长文本分块，用于并行处理（智能分块版本，确保每个分块都在LLM处理范围内）
         
@@ -295,8 +295,8 @@ class RAGEngine:
         start = 0
         
         # 智能分块：确保每个分块都能被LLM处理
-        # 考虑提示词开销（约2000-3000 tokens）+ 分块内容（8000 tokens）= 总共约11000 tokens
-        # 这样可以安全地在大部分LLM上运行
+        # 考虑提示词开销（约2000-3000 tokens）+ 分块内容（6000 tokens）≈ 8000-9000 tokens
+        # 更保守，降低超限概率
         
         while start < total_tokens:
             end = min(start + max_tokens_per_chunk, total_tokens)
@@ -355,7 +355,7 @@ class RAGEngine:
             original_tokens = len(self.token_encoder.encode(context_text))
             
             # 大分块处理（大幅减少分块数量以减少API调用次数）
-            chunks = self._chunk_text(context_text, max_tokens_per_chunk=250000, overlap_tokens=15000)
+            chunks = self._chunk_text(context_text, max_tokens_per_chunk=100000, overlap_tokens=20000)
             
             print(f"✅ [RAG检索] 全局检索完成，原始内容 {original_tokens} tokens，分为 {len(chunks)} 个大分块")
             

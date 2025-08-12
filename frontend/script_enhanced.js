@@ -1086,65 +1086,74 @@ function showSystemInfo() {
     console.log('📋 显示系统介绍');
     
     const systemIntroMessage = `
-        <h3>🤖 智能创作助手 - 系统介绍</h3>
-        
-        <div class="intro-section">
-            <h4>✨ 系统功能介绍</h4>
-            <ul class="feature-list">
-                <li><strong>📖 深度文本分析：</strong>基于GraphRAG技术，深入理解文本内容、人物关系和情节结构</li>
-                <li><strong>🔍 智能问答：</strong>针对书籍内容进行精准问答，获取角色信息、情节分析等</li>
-                <li><strong>🎭 角色探索：</strong>深入了解书中人物的性格、关系网络和发展轨迹</li>
-                <li><strong>📝 创作辅助：</strong>基于原作风格和内容进行创作建议和灵感启发</li>
-                <li><strong>🔗 关联分析：</strong>发现文本中的隐藏联系和深层含义</li>
-            </ul>
-        </div>
-
-        <div class="intro-section">
-            <h4>⚡ 技术特色</h4>
-            <div class="tech-highlight">
-                <p>本系统采用 <strong>GraphRAG</strong> (图增强检索生成) 技术，将文本转换为知识图谱，能够：</p>
-                <ul class="tech-list">
-                    <li>🧠 理解复杂的人物关系网络</li>
-                    <li>🔗 发现跨章节的情节关联</li>
-                    <li>📊 提供基于图结构的深度分析</li>
-                    <li>🎯 实现精准的上下文理解</li>
-                </ul>
+        <div class="info-card">
+            <div class="info-header">
+                <div class="info-title-left">
+                    <i class="fas fa-robot"></i>
+                    <div class="info-titles">
+                        <h3>智能创作助手</h3>
+                        <p class="info-sub">GraphRAG 加持 · 真流式 · 单书/跨书创作</p>
+                    </div>
+                </div>
+                <div class="info-stats">
+                    <div class="stat"><span class="stat-label">模式</span><span class="stat-value">单书 / 跨书</span></div>
+                    <div class="stat"><span class="stat-label">流式</span><span class="stat-value">SSE</span></div>
+                    <div class="stat"><span class="stat-label">润色/点评</span><span class="stat-value">已启用</span></div>
+                </div>
             </div>
-        </div>
 
-        <div class="intro-section">
-            <h4>🚀 使用指南</h4>
-            <p><strong>第一步：</strong>选择一本书籍作为分析对象</p>
-            <p><strong>第二步：</strong>开始提问！例如：</p>
-            <ul class="example-list">
-                <li>"这本书的主要人物有哪些？"</li>
-                <li>"分析一下主人公的性格特点"</li>
-                <li>"书中的核心冲突是什么？"</li>
-                <li>"帮我总结一下主要情节"</li>
-                <li>"XX和XX之间的关系如何？"</li>
-                <li>"这个情节有什么深层含义？"</li>
-            </ul>
-        </div>
+            <div class="info-grid">
+                <section>
+                    <h4>✨ 能力概览</h4>
+                    <ul class="feature-list compact">
+                        <li><strong>📖 深度文本分析：</strong>理解人物关系、情节结构与主题意象</li>
+                        <li><strong>🔍 精准检索生成：</strong>GraphRAG 全局/局部检索 + 上下文融合回答</li>
+                        <li><strong>🎭 角色探索：</strong>人物画像、关系网、关键事件关联</li>
+                        <li><strong>📝 创作辅助：</strong>基于原作风格完成续写与创作</li>
+                        <li><strong>🪄 润色/点评：</strong>一键润色上一条AI输出，并严格对齐用户需求</li>
+                    </ul>
+                </section>
 
-        <div class="intro-section">
-            <h4>💡 使用技巧</h4>
-            <ul class="tips-list">
-                <li><strong>🎯 具体提问：</strong>越具体的问题，越能得到精准的答案</li>
-                <li><strong>🔄 多角度探索：</strong>可以从不同角度分析同一个话题</li>
-                <li><strong>📚 切换书籍：</strong>随时可以切换到其他书籍进行分析</li>
-                <li><strong>🛑 随时停止：</strong>可以使用停止按钮中断AI回复</li>
-            </ul>
-        </div>
+                <section>
+                    <h4>⚡ 技术要点</h4>
+                    <div class="tech-highlight tight">
+                        <ul class="tech-list bullets">
+                            <li>🧠 GraphRAG：图结构检索、跨章节关联与证据聚合</li>
+                            <li>🔗 多书并行：跨书检索合成，按书分组展示思考</li>
+                            <li>📡 SSE 真流式：token 级前端实时呈现</li>
+                            <li>🧰 LangChain 工具链：可见的工具调用与阶段进度</li>
+                        </ul>
+                    </div>
+                </section>
+            </div>
 
-        <div class="intro-section">
-            <p><strong>📚 当前可用书籍：</strong></p>
-            <div class="quick-actions">
-                <button class="quick-action-btn" onclick="listBooks()">
-                    <i class="fas fa-list"></i> 查看所有书籍
-                </button>
-                <button class="quick-action-btn" onclick="showAddBookModal()">
-                    <i class="fas fa-plus"></i> 添加新书籍
-                </button>
+            <section class="info-quick">
+                <h4>🚀 快速开始</h4>
+                <ol class="steps">
+                    <li><span class="badge">1</span> 在左侧选择一本书，或切换到 <span class="pill">跨书模式</span> 多选书本</li>
+                    <li><span class="badge">2</span> 在下方输入框直接提问或创作指令</li>
+                    <li><span class="badge">3</span> 需要修饰输出时，点击消息下方 <span class="pill">润色</span> 或 <span class="pill">点评</span> 按钮</li>
+                </ol>
+                <div class="chips">
+                    <span class="chip" onclick="useExample('这本书的主要人物有哪些？')">主要人物</span>
+                    <span class="chip" onclick="useExample('分析一下主人公的性格特点')">性格分析</span>
+                    <span class="chip" onclick="useExample('书中的核心冲突是什么？')">核心冲突</span>
+                    <span class="chip" onclick="useExample('续写：在第十章之后，描写主角与X重逢')">续写示例</span>
+                </div>
+            </section>
+
+            <section class="info-tips">
+                <h4>💡 使用技巧</h4>
+                <ul class="tips-list compact">
+                    <li><strong>🎯 具体明确：</strong>尽量给出目标风格、篇幅、禁忌等约束</li>
+                    <li><strong>🧩 分阶段：</strong>需要证据时先检索，再让AI基于证据生成</li>
+                    <li><strong>🛑 随时停止：</strong>生成太长时可中断并继续润色/改写</li>
+                </ul>
+            </section>
+
+            <div class="info-actions">
+                <button class="quick-action-btn" onclick="listBooks()"><i class="fas fa-list"></i> 查看书籍</button>
+                <button class="quick-action-btn" onclick="showAddBookModal()"><i class="fas fa-plus"></i> 添加书籍</button>
             </div>
         </div>
     `;

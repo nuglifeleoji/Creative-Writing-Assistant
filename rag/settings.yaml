@@ -25,24 +25,42 @@ models:
     tokens_per_minute: null              # set to null to disable rate limiting
     requests_per_minute: null            # set to null to disable rate limiting
   default_embedding_model:
-    type: openai_embedding # or azure_openai_embedding
-    api_base: https://open.bigmodel.cn/api/paas/v4
-    # api_base: https://<instance>.openai.azure.com
-    # api_version: 2024-05-01-preview
+    type: azure_openai_embedding # or azure_openai_embedding
+    api_base: https://tcamp.openai.azure.com
+    api_version: "2023-05-15"
     auth_type: api_key # or azure_managed_identity
-    api_key: ${GLM_API_KEY}
+    api_key: cegVziITiNPb7wEZVLSB1GBXr3okwWwreE2h5ijICRTNjMLMGhmkJQQJ99BHACHYHv6XJ3w3AAABACOG3fBh
     # audience: "https://cognitiveservices.azure.com/.default"
     # organization: <organization_id>
-    model: embedding-3
-    # deployment_name: <azure_model_deployment_name>
+    model: text-embedding-ada-002
+    deployment_name: text-embedding-ada-002
     encoding_model: cl100k_base # automatically set by tiktoken if left undefined
     model_supports_json: true # recommended if this is available for your model.
-    concurrent_requests: 40 # max number of simultaneous LLM requests allowed
+    concurrent_requests: 25 # max number of simultaneous LLM requests allowed
     async_mode: threaded # or asyncio
     retry_strategy: native
     max_retries: 10
-    tokens_per_minute: null              # set to null to disable rate limiting
-    requests_per_minute: null            # set to null to disable rate limiting
+    tokens_per_minute: null              # set to null to disable rate limiting or auto for dynamic
+    requests_per_minute: null            # set to null to disable rate limiting or auto for dynamic
+  # default_embedding_model:
+  #   type: openai_embedding # or azure_openai_embedding
+  #   api_base: https://open.bigmodel.cn/api/paas/v4
+  #   # api_base: https://<instance>.openai.azure.com
+  #   # api_version: 2024-05-01-preview
+  #   auth_type: api_key # or azure_managed_identity
+  #   api_key: ${GLM_API_KEY}
+  #   # audience: "https://cognitiveservices.azure.com/.default"
+  #   # organization: <organization_id>
+  #   model: embedding-3
+  #   # deployment_name: <azure_model_deployment_name>
+  #   encoding_model: cl100k_base # automatically set by tiktoken if left undefined
+  #   model_supports_json: true # recommended if this is available for your model.
+  #   concurrent_requests: 40 # max number of simultaneous LLM requests allowed
+  #   async_mode: threaded # or asyncio
+  #   retry_strategy: native
+  #   max_retries: 10
+  #   tokens_per_minute: null              # set to null to disable rate limiting
+  #   requests_per_minute: null            # set to null to disable rate limiting
 
 ### Input settings ###
 

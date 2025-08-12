@@ -33,8 +33,8 @@ models:
     async_mode: threaded # or asyncio
     retry_strategy: native
     max_retries: 10
-    tokens_per_minute: 120000              # set to null to disable rate limiting or auto for dynamic
-    requests_per_minute: 30            # set to null to disable rate limiting or auto for dynamic
+    tokens_per_minute: 1200000              # set to null to disable rate limiting or auto for dynamic
+    requests_per_minute: null            # set to null to disable rate limiting or auto for dynamic
 
 ### Input settings ###
 
@@ -69,7 +69,7 @@ reporting:
 vector_store:
   default_vector_store:
     type: lancedb
-    db_uri: output\lancedb
+    db_uri: output/lancedb
     container_name: default
     overwrite: True
 
@@ -118,8 +118,8 @@ umap:
   enabled: false # if true, will generate UMAP embeddings for nodes (embed_graph must also be enabled)
 
 snapshots:
-  graphml: false
-  embeddings: false
+  graphml: true
+  embeddings: true
 
 ### Query settings ###
 ## The prompt locations are required here, but each search method has a number of optional knobs that can be tuned.

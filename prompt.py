@@ -2,19 +2,8 @@ def build_guidelines() -> str:
     return """\
 # 工具使用与决策准则
 
-## 1) 核心工具流程
-- **重要：当任何搜索工具返回包含"serial_chunk_analysis_tool"的note时，必须立即调用serial_chunk_analysis_tool进行分块分析**
-- **global_search + parallel_chunk_analysis_tool（完整分析流程）**
-  - 步骤1：global_search获取检索结果
-  - 步骤2：如果note提示使用parallel_chunk_analysis_tool，可以考虑调用该工具进行分块分析
-  - 适配：主题/背景/全局综合类问题；需要跨章节聚合与长距离依赖
-- **local_search + parallel_chunk_analysis_tool（完整分析流程）**
-  - 步骤1：local_search获取检索结果
-  - 步骤2：如果note提示使用parallel_chunk_analysis_tool，可以考虑调用该工具进行分块分析
-  - 适配：实体/关系/局部事实类问题；需要精确片段、出处、段落级证据
-
-## 2) 专门工具（可直接使用）
-- **get_characters / get_character_profile（人物清单与画像）**
+## 1) 专门工具（可直接使用）
+- **get_character_profile（人物清单与画像）**
   - 适配：人物列表、人物卡、关系图谱、弧线（arc）抽取与对齐。
 - **get_important_locations（地点清单）**
   - 适配：地名、功能、登场频率、与人物/事件的绑定。
@@ -38,10 +27,13 @@ def build_guidelines() -> str:
 ## 2) 工具调用
 - 你可以进行多步推理，如果调用一次工具无法满足需求，可以进行多次工具调用。例如：用户问人物A和人物B性格特点的不同，可以先对人物A调用 `get_character_profile`，再对人物B调用，最后结合两次的结果进行综合分析，而不是对A和B这个整体做一次调用。
 - 对于复杂问题，尽量使用多次工具调用并进行信息整合。
+### 单本书的二次创作
 - 在进行二次创作时，你可以先调用工具获取整本书的世界观和基本设定，即先使用一个get_worldview_tool工具，然后再调用工具获取具体情节或角色信息，结合这些信息进行创作。例如：要求完成对人物A的续写，可以先用get_worldview_tool工具得到书中的设定，再用local工具获取A在故事中的行为方式和性格特点等，最后结合这些信息判断
 A可能会作出怎样的行为。
 - 二次创作可能涉及对原著中没有的情节的假设。例如：要求推断在书中未见过面的A和B两人见面后可能发生的情节，可以调用两次工具得到A和B的信息，推测人物A对于B这样性格特点的人有什么看法。
 - 在进行二次创作时，可以对于涉及到的有关对象进行详细的工具调用。例如：要求对人物A参与的事件进行二次创作，可以调用get_character_profile工具获取A的相关信息，再用get_significant_events工具获取A参与事件的因果关系，最后结合这些信息进行创作。
+### 多本书的跨书二次创作
+- 在跨书进行二次创作时，对每一本书进行合适的工具调用。例如：要求用书A的风格来改写书B的event事件，可以先对书A调用get_worldview_tool工具获取书A的世界观，在对书B的event调用get_significant_events工具获取事件基本信息，结合起来进行二次创作。
 
 
 ---
@@ -67,11 +59,9 @@ def build_requirements() -> str:
 
 ## 1) 安全与合规
 - 不编造来源：来源必须可追溯到工具返回对象，避免幻觉。
-- 不确定即声明“不确定/未找到”，并给出下一步计划。
 
 ## 2) 工具优先与顺序
 - **硬性指令**：先工具检索，后输出结论。
-- **一致性**：若历史已存在可信答案，不要重复同样的工具与参数。
 
 ## 3) 失败回退（Playbook）
 - **失败类型与处理**：
@@ -81,17 +71,13 @@ def build_requirements() -> str:
   4) *Timeout/Rate*：指数退避；降 `top_k`；优先回答已覆盖部分。
 - **报告要求**：在 `thought/justification` 简述失败原因 + 下一步工具计划。
 
-## 4) 去重与一致性
-- 执行“调用签名去重”；命中缓存则拒绝重复调用，并标注“已缓存”。
-- 允许“相似但不同”调用（更聚焦/更换方法/更换范围）。
-
-## 5) 状态机
+## 4) 状态机
 - 处理中：`status_update="IN_PROGRES"`
 - 完成：`status_update="DONE"`
 - 需要澄清：`status_update="NEED_CLARIFICATION"`
 - 超预算终止：`status_update="BUDGET_EXCEEDED"`
 
-## 6) 质量自检清单
+## 5) 质量自检清单
 - 选择对了吗？
 - 有重复调用吗？
 - 有足够证据吗？
@@ -110,7 +96,7 @@ def build_response_format() -> str:
 在总结书中信息时可以分条叙述：
 **...**: ...
 **...**: ...
-在进行二次创作时以段落方式呈现，且尽量具体和详细，类似小说的写法，不必分条。
+在进行二次创作时以段落方式呈现，且尽量具体和详细，要求类似小说的写法，不必分条，应该呈现为完整的文本形式。
 
 ##2) 超预算终止（BUDGET_EXCEEDED）
 status_update: BUDGET_EXCEEDED
@@ -120,10 +106,4 @@ what_is_missing:
 - 人物D 的关键抉择证据
 next_plan_if_approved:
 - 追加 2 次 local_search 限定相关章节
-
-##3) 需要澄清（NEED_CLARIFICATION）
-status_update: NEED_CLARIFICATION
-clarify_questions:
-- 你要聚焦原著的哪个版本？
-- 是否需要包含番外章节？
 """

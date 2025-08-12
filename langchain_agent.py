@@ -23,7 +23,7 @@ from langchain_openai import ChatOpenAI,AzureChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
 # If you use quick engine, modify this line
-from search.quick_engine import rag_engine, multi_book_manager, RAGEngine
+from search.rag_engine import rag_engine, multi_book_manager, RAGEngine
 #-----------------------------------------------------------------------
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 import prompt_utils
@@ -198,10 +198,10 @@ class GraphAnalysisAgent:
         return await self.global_search_full_async("获取故事的世界观和基本设定")
 
     async def get_character_profile_async(self, character_name: str) -> Dict[str, Any]:
-        return await self.global_search_full_async(f"获取{character_name}的详细信息")
+        return await self.local_search_full_async(f"获取{character_name}的详细信息")
     
     async def get_significant_event_async(self, event_name:str) -> Dict[str, Any]:
-        return await self.global_search_full_async(f"获取事件{event_name}的详细信息")
+        return await self.local_search_full_async(f"获取事件{event_name}的详细信息")
     
     async def get_main_theme_async(self) -> Dict[str, Any]:
         return await self.global_search_full_async("分析故事的主题")
@@ -1197,12 +1197,12 @@ def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentE
         local_search_generate_tool,
         
         #=== 新增：独立LLM调用工具 ===
-        llm_generate_tool,
-        llm_analyze_tool,
+        # llm_generate_tool,
+        # llm_analyze_tool,
         
         #=== 新增：分块处理工具 ===
-        parallel_chunk_analysis_tool,
-        summary_chunk_results_tool,
+        # parallel_chunk_analysis_tool,
+        # summary_chunk_results_tool,
         
         # === 原有工具 ===
         get_characters_tool,

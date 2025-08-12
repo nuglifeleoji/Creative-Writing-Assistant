@@ -10,7 +10,7 @@ models:
     api_base: https://tcamp.openai.azure.com/
     api_version: "2024-12-01-preview"
     auth_type: api_key # or azure_managed_identity
-    api_key: ${OPENAI_API_KEY} # set this in the generated .env file
+    api_key: cegVziITiNPb7wEZVLSB1GBXr3okwWwreE2h5ijICRTNjMLMGhmkJQQJ99BHACHYHv6XJ3w3AAABACOG3fBh # set this in the generated .env file
     # audience: "https://cognitiveservices.azure.com/.default"
     # organization: <organization_id>
     model: gpt-4o-mini
@@ -28,7 +28,7 @@ models:
     api_base: https://tcamp.openai.azure.com
     api_version: "2023-05-15"
     auth_type: api_key # or azure_managed_identity
-    api_key: ${OPENAI_API_KEY}
+    api_key: cegVziITiNPb7wEZVLSB1GBXr3okwWwreE2h5ijICRTNjMLMGhmkJQQJ99BHACHYHv6XJ3w3AAABACOG3fBh
     # audience: "https://cognitiveservices.azure.com/.default"
     # organization: <organization_id>
     model: text-embedding-ada-002
@@ -75,7 +75,7 @@ reporting:
 vector_store:
   default_vector_store:
     type: lancedb
-    db_uri: output\lancedb
+    db_uri: output/lancedb
     container_name: default
     overwrite: True
 
@@ -124,8 +124,8 @@ umap:
   enabled: false # if true, will generate UMAP embeddings for nodes (embed_graph must also be enabled)
 
 snapshots:
-  graphml: false
-  embeddings: false
+  graphml: true
+  embeddings: true
 
 ### Query settings ###
 ## The prompt locations are required here, but each search method has a number of optional knobs that can be tuned.

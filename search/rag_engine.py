@@ -220,10 +220,10 @@ class RAGEngine:
         self.local_context_params = {
             "text_unit_prop": 0.4,  # 从0.5减少到0.4
             "community_prop": 0.05,  # 从0.1减少到0.05
-            "conversation_history_max_turns": 2,  # 从3减少到2
+            "conversation_history_max_turns": 0,  # 从3减少到2
             "conversation_history_user_turns_only": True,
-            "top_k_mapped_entities": 3,  # 从5减少到3
-            "top_k_relationships": 3,  # 从5减少到3
+            "top_k_mapped_entities": 10,  # 从5减少到3
+            "top_k_relationships": 10,  # 从5减少到3
             "include_entity_rank": True,
             "include_relationship_weight": True,
             "include_community_rank": False,
@@ -325,7 +325,6 @@ class RAGEngine:
         
         print(f"📊 [智能分块] 原始 {total_tokens} tokens 分为 {len(chunks)} 个安全分块（每块最多 {max_tokens_per_chunk} tokens，确保LLM可处理）")
         return chunks
-    
     async def global_search_retrieve(self, query: str) -> Dict[str, Any]:
         """全局搜索 - 仅检索阶段，返回完整召回内容用于分块处理"""
         try:
@@ -603,7 +602,7 @@ class RAGEngine:
                 },
                 "context_ready": True,
                 "success": True,
-                "note": "检索完成，请使用parallel_chunk_analysis_tool进行分析"
+                "note": "检索完成,请结合上下文进行分析"
             }
         except Exception as e:
             print(f"❌ [RAG检索] 局部检索失败: {e}")
@@ -654,7 +653,18 @@ class RAGEngine:
             
             # 2. 获取检索到的内容和分块
             retrieved_context = retrieve_result['retrieved_context']
+            length = retrieved_context['original_length']
             full_text = retrieved_context['full_text']
+            if length <= 20000:
+                print("直接返回给agent")
+                return {
+                    "method": "local_retrieve",
+                    "query": query,
+                    "text": full_text,
+                    "context_ready": True,
+                    "success": True,
+                    "note": "检索完成，原始内容未超过限制，直接返回"
+                }
             chunks = retrieved_context['chunks']
             
             print(f"📊 [分块处理] 开始对 {len(chunks)} 个分块进行并行LLM分析")
@@ -668,25 +678,23 @@ class RAGEngine:
                 print(f"  📝 [分块 {chunk_id}] 正在分析 ({chunk_tokens} tokens)")
                 
                 # 构建分析提示（局部搜索：聚焦具体细节）
-                analysis_prompt = f"""请基于以下内容回答用户问题，专注于具体细节：
-
-用户问题：{query}
+                analysis_prompt = f"""你是一个文本分析助手，请基于输入的文本提取与用户问题相关的信息：{query}。输入内容是一个数据表格，它代表了某本书的一部分数据信息且是分条对内容进行表述，你可以通过这个数据表格获取有用内容。
 
 内容片段 [{chunk_id + 1}]:
 {chunk_text}
 
 要求：
-- 重点提取具体事实、数据、人物关系
-- 引用关键文本段落作为证据
-- 如果内容不相关，说明"此片段无相关信息"
-- 简洁准确，突出关键细节"""
+# 文本分析要求
+- 根据上面的文本片段回答用户问题，尽可能详细，逻辑严密。例如：用户问题有关“总结书中主要信息、主题”，那么就对于输入的文本信息进行总结，提取其中的关键部分；如果问题有关“书中的人物A”，那么就提取与人物A相关的信息，等等。
+# 输出格式
+严格按照中文输出，可以考虑分条叙述。"""
                 
                 try:
                     # 检查提示长度，避免token超限
                     prompt_tokens = len(self.token_encoder.encode(analysis_prompt))
-                    if prompt_tokens > 10000:  # 降低限制到10K，为响应留空间
+                    if prompt_tokens > 1000000:  # 降低限制到10K，为响应留空间
                         print(f"    ⚠️ [分块 {chunk_id}] 内容过长 ({prompt_tokens} tokens)，进行压缩")
-                        max_chunk_chars = 6000
+                        max_chunk_chars = 600000
                         if len(chunk_text) > max_chunk_chars:
                             compressed_text = chunk_text[:max_chunk_chars] + "\\n\\n[内容已压缩以适配LLM限制]"
                             analysis_prompt = f"""请基于以下内容回答用户问题，专注于具体细节：
@@ -709,7 +717,7 @@ class RAGEngine:
                     
                     return {
                         "chunk_id": chunk_id,
-                        "analysis": response,
+                        "analysis": response.output,
                         "success": True,
                         "chunk_tokens": chunk_tokens
                     }

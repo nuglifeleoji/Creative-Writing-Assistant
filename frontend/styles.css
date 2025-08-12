@@ -973,6 +973,8 @@ body {
     padding: 0;
 }
 
+.book-steps-list { padding-left: 10px; }
+
 .thinking-step {
     padding: 15px 20px;
     border-bottom: 1px solid #e1e8ff;

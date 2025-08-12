@@ -47,6 +47,7 @@ let elements = {};
 let currentAbortController = null;
 let composeMode = 'single';
 let selectedCrossBooks = [];
+let assistantStreamingBuffers = {};
 
 // 聊天记录持久化
 function saveChatHistory() {
@@ -478,23 +479,11 @@ async function sendCrossMessage(promptText) {
         addMessage('system', '请先选择跨书创作的书目');
         return;
     }
-    // 添加用户消息
-    const userMessageId = 'user-' + Date.now();
-    addMessage('user', promptText, null, userMessageId);
-    elements.messageInput.value = '';
-    if (elements.messageInput) elements.messageInput.style.height = 'auto';
-
     // 状态
     showLoading(true);
     isProcessing = true;
     toggleStopButton(true);
     currentAbortController = new AbortController();
-
-    // 思考过程面板
-    clearThinkingProcess();
-    showThinkingProcess();
-    addThinkingStep('info', '🎯 跨书理解', `正在分析多书创作需求: "${promptText}"`);
-    addThinkingStep('plan', '📋 策略制定', `将对 ${selectedCrossBooks.length} 本书并行检索→融合→生成`);
 
     // 助手气泡
     const assistantMessageId = 'msg-' + Date.now();
@@ -548,12 +537,13 @@ async function sendCrossMessage(promptText) {
                         } else {
                             // 根据book对事件标题加前缀
                             if (parsed && parsed._bookTag) {
-                                if (currentEvent === 'tool_start') addThinkingStep('tool', `🔧[${parsed._bookTag}] 工具开始`, parsed.tool || parsed.toolName || '');
-                                else if (currentEvent === 'tool_end') addThinkingStep('success', `✅[${parsed._bookTag}] 工具完成`, (parsed.tool || parsed.toolName || '') + ' 完成');
-                                else if (currentEvent === 'llm_start') addThinkingStep('thinking', `🤖[${parsed._bookTag}] AI推理`, '');
-                                else if (currentEvent === 'llm_end') addThinkingStep('success', `✅[${parsed._bookTag}] 推理结束`, '');
-                                else if (currentEvent === 'status') addThinkingStep('info', `ℹ️[${parsed._bookTag}] 状态`, parsed.message || '');
-                                else if (currentEvent === 'per_book_context') addThinkingStep('info', `📚[${parsed._bookTag}] 上下文`, parsed.preview || '');
+                                const bk = parsed._bookTag;
+                                if (currentEvent === 'tool_start') addThinkingStepForBook(bk, 'tool', `🔧 工具开始`, parsed.tool || parsed.toolName || '');
+                                else if (currentEvent === 'tool_end') addThinkingStepForBook(bk, 'success', `✅ 工具完成`, (parsed.tool || parsed.toolName || '') + ' 完成');
+                                else if (currentEvent === 'llm_start') addThinkingStepForBook(bk, 'thinking', `🤖 AI推理`, '');
+                                else if (currentEvent === 'llm_end') addThinkingStepForBook(bk, 'success', `✅ 推理结束`, '');
+                                else if (currentEvent === 'status') addThinkingStepForBook(bk, 'info', `ℹ️ 状态`, parsed.message || '');
+                                else if (currentEvent === 'per_book_context') addThinkingStepForBook(bk, 'info', `📚 上下文`, parsed.preview || '');
                                 else handleSSEEvent(currentEvent, parsed, assistantMessageId);
                             } else {
                                 handleSSEEvent(currentEvent, parsed, assistantMessageId);
@@ -654,6 +644,18 @@ function handleSSEEvent(eventType, data, assistantMessageId) {
         case 'llm_end':
             if (data.usage && data.usage.finish_reason === 'stop') {
                 addThinkingStep('success', '✅ 推理完成', 'AI推理过程已完成');
+            }
+            break;
+        case 'llm_token':
+            if (data && typeof data.token === 'string') {
+                if (!assistantStreamingBuffers[assistantMessageId]) assistantStreamingBuffers[assistantMessageId] = '';
+                assistantStreamingBuffers[assistantMessageId] += data.token;
+                const messageElement = document.getElementById(assistantMessageId);
+                const messageText = messageElement?.querySelector('.message-text');
+                if (messageText) {
+                    messageText.innerHTML = formatMessage(assistantStreamingBuffers[assistantMessageId]);
+                    if (elements.chatMessages) elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+                }
             }
             break;
             
@@ -916,6 +918,30 @@ function updateCurrentBook(bookName) {
         localStorage.setItem('currentBook', bookName);
     } else {
         localStorage.removeItem('currentBook');
+    }
+}
+
+// 跨书/单书模式下的当前选择显示
+function updateCurrentSelectionDisplay() {
+    if (!elements.currentBookName) return;
+    if (composeMode === 'cross') {
+        if (selectedCrossBooks.length > 0) {
+            elements.currentBookName.textContent = '跨书：' + selectedCrossBooks.join(', ');
+        } else {
+            elements.currentBookName.textContent = '跨书：请选择书本';
+        }
+        elements.currentBookName.style.color = '#1976d2';
+        elements.currentBookName.style.fontStyle = '';
+    } else {
+        // 恢复单书显示
+        elements.currentBookName.textContent = currentBook || '请选择书本';
+        if (!currentBook) {
+            elements.currentBookName.style.color = '#ff6b6b';
+            elements.currentBookName.style.fontStyle = 'italic';
+        } else {
+            elements.currentBookName.style.color = '';
+            elements.currentBookName.style.fontStyle = '';
+        }
     }
 }
 
@@ -1266,6 +1292,60 @@ function addThinkingStep(type, title, content) {
     }
 }
 
+// === 跨书模式：按书分组的思考过程 ===
+function ensureBookThinkingSection(bookName) {
+    if (!elements.thinkingSteps) return null;
+    const sectionId = `book-steps-${bookName}`;
+    let section = document.getElementById(sectionId);
+    if (!section) {
+        // 外层容器
+        section = document.createElement('div');
+        section.id = sectionId;
+        section.className = 'thinking-step';
+
+        // 头部（可折叠）
+        const header = document.createElement('div');
+        header.className = 'step-header';
+        header.innerHTML = `<span class="step-title">📚 ${bookName}</span><span class="step-time"></span>`;
+        section.appendChild(header);
+
+        // 列表容器
+        const list = document.createElement('div');
+        list.className = 'book-steps-list';
+        section.appendChild(list);
+
+        // 点击折叠/展开
+        header.addEventListener('click', () => {
+            const isHidden = list.style.display === 'none';
+            list.style.display = isHidden ? 'block' : 'none';
+        });
+
+        elements.thinkingSteps.appendChild(section);
+    }
+    return section.querySelector('.book-steps-list');
+}
+
+function addThinkingStepTo(containerEl, type, title, content) {
+    if (!containerEl) return;
+    const time = new Date().toLocaleTimeString();
+    const stepDiv = document.createElement('div');
+    stepDiv.className = `thinking-step thinking-step-${type}`;
+    stepDiv.innerHTML = `
+        <div class="step-header">
+            <span class="step-title">${title}</span>
+            <span class="step-time">${time}</span>
+        </div>
+        <div class="step-content">${content || ''}</div>
+    `;
+    containerEl.appendChild(stepDiv);
+    containerEl.scrollTop = containerEl.scrollHeight;
+}
+
+function addThinkingStepForBook(bookName, type, title, content) {
+    const list = ensureBookThinkingSection(bookName);
+    addThinkingStepTo(list, type, title, content);
+}
+
 // 停止生成
 function stopGeneration() {
     console.log('🛑 用户请求停止生成');
@@ -1338,10 +1418,12 @@ function initializeEventListeners() {
                         modeMenuBtn.classList.remove('active');
                     }
                 }
-                addMessage('system', composeMode === 'cross' ? '🧩 跨书模式已启用（请选择多本书）' : '📖 单书模式已启用');
+                // 用 assistant 角色更友好（带机器人图标），避免系统消息的感叹号样式
+                addMessage('assistant', composeMode === 'cross' ? '🧩 跨书模式已启用（请选择多本书）' : '📖 单书模式已启用');
                 modeDropdown.classList.remove('open');
-                // 切换后刷新书单高亮
+                // 切换后刷新书单高亮与顶部选择展示
                 listBooks();
+                updateCurrentSelectionDisplay();
             });
         });
         document.addEventListener('click', (e) => {

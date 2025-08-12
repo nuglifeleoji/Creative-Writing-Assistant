@@ -690,7 +690,9 @@ def cross_chat():
                 def cb_factory_picker(book_name: str):
                     return lambda: handler_factory_for_book(book_name)
 
-                # 运行并发子代理
+                # 运行并发子代理（实时推送事件）
+                contexts_holder = {"data": None, "error": None}
+
                 async def run_all():
                     from cross_book_agent import CrossOrchestrator
                     orch = orchestrator
@@ -699,11 +701,32 @@ def cross_chat():
                         tasks.append(orch._run_one_book_agent(b, prompt, history or [], cb_factory_picker(b)))
                     return await asyncio.gather(*tasks)
 
-                contexts = loop.run_until_complete(run_all())
+                def run_retrieve_thread():
+                    try:
+                        contexts_holder["data"] = loop.run_until_complete(run_all())
+                    except Exception as re:
+                        contexts_holder["error"] = str(re)
 
-                # 转发检索期事件
-                while not sse_queue.empty():
-                    yield sse_queue.get()
+                retrieve_thread = threading.Thread(target=run_retrieve_thread, daemon=True)
+                retrieve_thread.start()
+
+                # 实时转发回调输出（检索阶段）
+                while True:
+                    try:
+                        chunk = sse_queue.get(timeout=0.1)
+                        yield chunk
+                    except queue.Empty:
+                        if not retrieve_thread.is_alive():
+                            break
+                        continue
+
+                retrieve_thread.join()
+
+                if contexts_holder["error"]:
+                    yield "event: error\n"
+                    yield f"data: {json.dumps({'error': contexts_holder['error']}, ensure_ascii=False)}\n\n"
+                    return
+                contexts = contexts_holder["data"] or []
 
                 # 构造生成消息（融合）
                 messages = cross_agent.build_messages(contexts, prompt)

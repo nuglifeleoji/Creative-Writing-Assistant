@@ -49,6 +49,16 @@ let composeMode = 'single';
 let selectedCrossBooks = [];
 let assistantStreamingBuffers = {};
 
+// 进度条相关变量
+let currentProgress = {
+    percentage: 0,
+    currentStep: 0,
+    totalSteps: 0,
+    steps: [],
+    startTime: null,
+    estimatedTime: null
+};
+
 // 聊天记录持久化
 function saveChatHistory() {
     try {
@@ -328,9 +338,15 @@ async function sendMessage() {
         clearThinkingProcess();
         showThinkingProcess();
         
+        // 初始化进度条
+        initializeProgress();
+        
         // 添加初始思考步骤
         addThinkingStep('info', '🎯 理解问题', `正在分析问题: "${message}"`);
         addThinkingStep('plan', '📋 制定策略', '正在制定回答策略，准备调用相关工具...');
+        
+        // 更新进度
+        updateProgress('理解问题', 'current');
     
     try {
         if (composeMode === 'cross') {
@@ -598,12 +614,16 @@ function handleSSEEvent(eventType, data, assistantMessageId) {
         case 'tool_start':
             if (data.tool && data.tool.includes('global_search_retrieve')) {
                 addThinkingStep('tool', '🔍 知识图谱检索', '正在从知识图谱中搜索相关信息...');
+                updateProgress('检索信息', 'current');
             } else if (data.tool && data.tool.includes('local_search_retrieve')) {
                 addThinkingStep('tool', '📚 本地文档检索', '正在本地文档中查找相关内容...');
+                updateProgress('检索信息', 'current');
             } else if (data.tool && data.tool.includes('community_search')) {
                 addThinkingStep('tool', '👥 社区数据搜索', '正在社区数据中搜索相关讨论...');
+                updateProgress('检索信息', 'current');
             } else if (data.tool && data.tool.includes('global_search_generate')) {
                 addThinkingStep('tool', '🎯 智能生成', '正在基于检索到的信息生成回答...');
+                updateProgress('生成回答', 'current');
             } else if (data.toolName || data.tool) {
                 const toolName = data.toolName || data.tool;
                 const desc = toolDescriptions[toolName];
@@ -612,6 +632,7 @@ function handleSSEEvent(eventType, data, assistantMessageId) {
                 } else {
                     addThinkingStep('tool', '🔧 工具执行', `正在使用工具: ${toolName}`);
                 }
+                updateProgress('检索信息', 'current');
             }
             break;
             
@@ -638,6 +659,7 @@ function handleSSEEvent(eventType, data, assistantMessageId) {
         case 'llm_start':
             if (data.model) {
                 addThinkingStep('thinking', '🤖 AI推理', `正在使用 ${data.model} 进行智能推理...`);
+                updateProgress('AI推理', 'current');
             }
             break;
             
@@ -648,7 +670,10 @@ function handleSSEEvent(eventType, data, assistantMessageId) {
             break;
         case 'llm_token':
             if (data && typeof data.token === 'string') {
-                if (!assistantStreamingBuffers[assistantMessageId]) assistantStreamingBuffers[assistantMessageId] = '';
+                if (!assistantStreamingBuffers[assistantMessageId]) {
+                    assistantStreamingBuffers[assistantMessageId] = '';
+                    updateProgress('生成回答', 'current');
+                }
                 assistantStreamingBuffers[assistantMessageId] += data.token;
                 const messageElement = document.getElementById(assistantMessageId);
                 const messageText = messageElement?.querySelector('.message-text');
@@ -734,6 +759,10 @@ function updateAssistantMessage(messageId, data, finalResponse) {
                 // 添加最终完成的思考步骤
                 addThinkingStep('success', '🎉 回答完成', '已为你生成了完整的回答');
                 
+                // 完成进度条
+                updateProgress('完成输出', 'completed');
+                completeProgress();
+                
                 // 清理流式输出缓冲区
                 delete assistantStreamingBuffers[messageId];
             } else {
@@ -750,6 +779,10 @@ function updateAssistantMessage(messageId, data, finalResponse) {
                     
                     // 添加最终完成的思考步骤
                     addThinkingStep('success', '🎉 回答完成', '已为你生成了完整的回答');
+                    
+                    // 完成进度条
+                    updateProgress('完成输出', 'completed');
+                    completeProgress();
                     
                     // 清理流式输出缓冲区
                     delete assistantStreamingBuffers[messageId];
@@ -1375,6 +1408,159 @@ function addThinkingStepTo(containerEl, type, title, content) {
 function addThinkingStepForBook(bookName, type, title, content) {
     const list = ensureBookThinkingSection(bookName);
     addThinkingStepTo(list, type, title, content);
+}
+
+// 进度条相关函数
+function initializeProgress() {
+    currentProgress = {
+        percentage: 0,
+        currentStep: 0,
+        totalSteps: 5, // 默认5个步骤
+        steps: [
+            { name: '理解问题', status: 'pending', icon: '🎯' },
+            { name: '检索信息', status: 'pending', icon: '🔍' },
+            { name: 'AI推理', status: 'pending', icon: '🤖' },
+            { name: '生成回答', status: 'pending', icon: '✍️' },
+            { name: '完成输出', status: 'pending', icon: '🎉' }
+        ],
+        startTime: Date.now(),
+        estimatedTime: null
+    };
+    
+    showProgressBar();
+    updateProgressBar();
+}
+
+function showProgressBar() {
+    if (!elements.thinkingSteps) return;
+    
+    // 检查是否已存在进度条
+    let progressContainer = elements.thinkingSteps.querySelector('.progress-container');
+    if (!progressContainer) {
+        progressContainer = document.createElement('div');
+        progressContainer.className = 'progress-container';
+        progressContainer.innerHTML = `
+            <div class="progress-header">
+                <div class="progress-title">
+                    <i class="fas fa-tasks"></i>
+                    <span>处理进度</span>
+                </div>
+                <div class="progress-info">
+                    <span class="progress-percentage">0%</span>
+                    <span class="progress-time"></span>
+                </div>
+            </div>
+            <div class="progress-bar-container">
+                <div class="progress-bar" style="width: 0%"></div>
+            </div>
+            <div class="progress-steps"></div>
+        `;
+        
+        // 插入到思考步骤的最前面
+        elements.thinkingSteps.insertBefore(progressContainer, elements.thinkingSteps.firstChild);
+    }
+}
+
+function updateProgressBar() {
+    const progressContainer = elements.thinkingSteps?.querySelector('.progress-container');
+    if (!progressContainer) return;
+    
+    const progressBar = progressContainer.querySelector('.progress-bar');
+    const progressPercentage = progressContainer.querySelector('.progress-percentage');
+    const progressTime = progressContainer.querySelector('.progress-time');
+    const progressStepsContainer = progressContainer.querySelector('.progress-steps');
+    
+    // 更新进度条
+    if (progressBar) {
+        progressBar.style.width = `${currentProgress.percentage}%`;
+        if (currentProgress.percentage >= 100) {
+            progressBar.classList.add('completed');
+        }
+    }
+    
+    // 更新百分比
+    if (progressPercentage) {
+        progressPercentage.textContent = `${Math.round(currentProgress.percentage)}%`;
+    }
+    
+    // 更新时间信息
+    if (progressTime && currentProgress.startTime) {
+        const elapsed = Date.now() - currentProgress.startTime;
+        const elapsedSeconds = Math.floor(elapsed / 1000);
+        
+        if (currentProgress.estimatedTime && currentProgress.percentage > 0) {
+            const remaining = Math.max(0, currentProgress.estimatedTime - elapsedSeconds);
+            progressTime.textContent = `剩余 ${remaining}s`;
+        } else {
+            progressTime.textContent = `已用 ${elapsedSeconds}s`;
+        }
+    }
+    
+    // 更新步骤指示器
+    if (progressStepsContainer) {
+        progressStepsContainer.innerHTML = currentProgress.steps.map((step, index) => {
+            let className = 'progress-step';
+            if (step.status === 'completed') className += ' completed';
+            else if (step.status === 'current') className += ' current';
+            else className += ' pending';
+            
+            return `
+                <div class="${className}">
+                    <span>${step.icon}</span>
+                    <span>${step.name}</span>
+                </div>
+            `;
+        }).join('');
+    }
+}
+
+function updateProgress(stepName, status = 'current') {
+    // 查找对应的步骤
+    const stepIndex = currentProgress.steps.findIndex(step => 
+        step.name === stepName || step.name.includes(stepName) || stepName.includes(step.name)
+    );
+    
+    if (stepIndex !== -1) {
+        // 更新当前步骤状态
+        currentProgress.steps[stepIndex].status = status;
+        currentProgress.currentStep = stepIndex;
+        
+        // 将之前的步骤标记为完成
+        for (let i = 0; i < stepIndex; i++) {
+            if (currentProgress.steps[i].status !== 'completed') {
+                currentProgress.steps[i].status = 'completed';
+            }
+        }
+        
+        // 计算进度百分比
+        const completedSteps = currentProgress.steps.filter(step => step.status === 'completed').length;
+        const currentStepProgress = status === 'completed' ? 1 : 0.5; // 当前步骤算50%完成
+        currentProgress.percentage = Math.min(100, ((completedSteps + currentStepProgress) / currentProgress.totalSteps) * 100);
+        
+        // 估算剩余时间
+        if (currentProgress.percentage > 10) {
+            const elapsed = Date.now() - currentProgress.startTime;
+            const estimatedTotal = (elapsed / currentProgress.percentage) * 100;
+            currentProgress.estimatedTime = Math.floor(estimatedTotal / 1000);
+        }
+    }
+    
+    updateProgressBar();
+}
+
+function completeProgress() {
+    currentProgress.percentage = 100;
+    currentProgress.steps.forEach(step => step.status = 'completed');
+    updateProgressBar();
+    
+    // 3秒后隐藏进度条
+    setTimeout(() => {
+        const progressContainer = elements.thinkingSteps?.querySelector('.progress-container');
+        if (progressContainer) {
+            progressContainer.style.opacity = '0.5';
+            progressContainer.style.transition = 'opacity 0.5s ease';
+        }
+    }, 3000);
 }
 
 // 停止生成

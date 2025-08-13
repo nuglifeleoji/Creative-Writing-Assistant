@@ -719,20 +719,42 @@ function updateAssistantMessage(messageId, data, finalResponse) {
                 return;
             }
             
-            // 先显示开始输出的提示
-            addThinkingStep('info', '✍️ 开始输出回答', '正在为你生成回答...');
+            // 检查是否已经有流式输出的内容
+            const hasStreamedContent = assistantStreamingBuffers[messageId] && assistantStreamingBuffers[messageId].length > 0;
             
-            // 使用优化的打字机效果显示回答
-            const formattedResponse = formatMessage(data.response);
-            typewriterEffect(messageText, formattedResponse, 15).then(() => {
-                console.log('✅ 打字机效果完成');
+            if (hasStreamedContent) {
+                // 如果已经有流式输出，直接更新内容，不使用打字机效果
+                console.log('🔄 检测到已有流式输出，直接显示最终结果');
+                const formattedResponse = formatMessage(data.response);
+                messageText.innerHTML = formattedResponse;
                 
                 // 更新聊天记录中的助手回答
                 updateChatHistoryMessage(messageId, data.response);
                 
                 // 添加最终完成的思考步骤
                 addThinkingStep('success', '🎉 回答完成', '已为你生成了完整的回答');
-            });
+                
+                // 清理流式输出缓冲区
+                delete assistantStreamingBuffers[messageId];
+            } else {
+                // 如果没有流式输出，使用打字机效果（兼容非流式模式）
+                console.log('📝 没有流式输出，使用打字机效果');
+                addThinkingStep('info', '✍️ 开始输出回答', '正在为你生成回答...');
+                
+                const formattedResponse = formatMessage(data.response);
+                typewriterEffect(messageText, formattedResponse, 15).then(() => {
+                    console.log('✅ 打字机效果完成');
+                    
+                    // 更新聊天记录中的助手回答
+                    updateChatHistoryMessage(messageId, data.response);
+                    
+                    // 添加最终完成的思考步骤
+                    addThinkingStep('success', '🎉 回答完成', '已为你生成了完整的回答');
+                    
+                    // 清理流式输出缓冲区
+                    delete assistantStreamingBuffers[messageId];
+                });
+            }
             
             // 更新书本状态
             if (data.currentBook) {

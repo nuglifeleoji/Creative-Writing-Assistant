@@ -13,6 +13,7 @@ def build_guidelines() -> str:
   - 输出关注：主题脉络、关键事件时间线、互证的多点摘要。
 - **get_characters / get_character_profile（人物清单与画像）**
   - 适配：人物列表、人物卡、关系图谱、弧线（arc）抽取与对齐。
+  - 使用：**local_search**（角色信息通常在文本中有具体描述和对话）
   - 输入建议：{name?=None, need_relations=true, need_arc=true, viewpoint="author/narrator"}
 - **get_important_locations（地点清单）**
   - 适配：地名、功能、登场频率、与人物/事件的绑定。
@@ -25,9 +26,10 @@ def build_guidelines() -> str:
 - **get_causal_chains（因果链）**
 
 > 选择矩阵：
-- 精确事实 → local_search
-- 跨章脉络 → global_search
-- 人物/地点名录与画像 → 专用 get_* 工具
+- 精确事实、角色分析、人物关系 → local_search
+- 跨章脉络、主题分析、全局概述 → global_search
+- 人物列表与画像 → local_search（get_characters 等工具）
+- 地点清单 → get_important_locations
 - 背景设定与世界观 → background_knowledge
 - 若不确定：先 `global_search` 出纲（主题与主线），再用 `local_search` 打点验证
 

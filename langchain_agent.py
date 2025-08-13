@@ -183,10 +183,10 @@ class GraphAnalysisAgent:
         return await engine.local_search_full(query)
 
     async def get_characters_async(self) -> Dict[str, Any]:
-        return await self.global_search_full_async("列出故事中的所有人物角色")
+        return await self.local_search_full_async("列出故事中的所有人物角色，包括他们的性格特点和重要描述")
 
     async def get_relationships_async(self, p1: str, p2: str) -> Dict[str, Any]:
-        return await self.global_search_full_async(f"分析{p1}和{p2}之间的关系")
+        return await self.local_search_full_async(f"分析{p1}和{p2}之间的关系，包括具体的互动和对话")
 
     async def get_important_locations_async(self) -> Dict[str, Any]:
         return await self.global_search_full_async("分析故事中的重要地点和场景")

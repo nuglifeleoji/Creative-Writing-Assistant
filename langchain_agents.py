@@ -79,10 +79,10 @@ class GraphAnalysisAgent:
             return {"method": "local", "query": query, "error": str(e), "success": False}
 
     async def get_characters_async(self) -> Dict[str, Any]:
-        return await self.global_search_async("列出故事中的所有人物角色")
+        return await self.local_search_async("列出故事中的所有人物角色，包括他们的性格特点和重要描述")
 
     async def get_relationships_async(self, p1: str, p2: str) -> Dict[str, Any]:
-        return await self.global_search_async(f"分析{p1}和{p2}之间的关系")
+        return await self.local_search_async(f"分析{p1}和{p2}之间的关系，包括具体的互动和对话")
 
     async def get_important_locations_async(self) -> Dict[str, Any]:
         return await self.global_search_async("分析故事中的重要地点和场景")
@@ -108,7 +108,7 @@ class GraphAnalysisAgent:
     async def get_conflict_async(self) -> Dict[str, Any]:
         return await self.global_search_async("罗列出本书最大的冲突是什么")
     async def get_related_characters_async(self, event: str) -> Dict[str, Any]:
-        return await self.global_search_async(f"获取{event}事件的关联人物")
+        return await self.local_search_async(f"获取{event}事件的关联人物，包括他们的具体行为和对话")
     async def get_causal_chains_async(self, event: str) -> Dict[str, Any]:
         return await self.local_search_async(f"获取{event}事件的因果链：前置条件→触发→结果→后果")
     async def style_guardrails_async(self, persona: str) -> Dict[str, Any]:
@@ -149,7 +149,7 @@ class GraphAnalysisAgent:
     比较{a}与{b}，严格JSON：
     {{"values":["…"],"goals":["…"],"methods":["…"],"red_lines":["…"],"decision_style":"冲动|谨慎|算计","evidence":[{{"chapter":"…","quote":"<=40字"}}]}}
     """
-        return await self.global_search_async(q)
+        return await self.local_search_async(q)
 
 # --- 第二步：创建 LangChain Agent ---
 def create_graphrag_agent(graphrag_agent_instance: GraphAnalysisAgent) -> AgentExecutor:

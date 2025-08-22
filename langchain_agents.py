@@ -79,7 +79,7 @@ class GraphAnalysisAgent:
             return {"method": "local", "query": query, "error": str(e), "success": False}
 
     async def get_characters_async(self) -> Dict[str, Any]:
-        return await self.local_search_async("列出故事中的所有人物角色，包括他们的性格特点和重要描述")
+        return await self.global_search_async("列出故事中的所有人物角色")
 
     async def get_relationships_async(self, p1: str, p2: str) -> Dict[str, Any]:
         return await self.local_search_async(f"分析{p1}和{p2}之间的关系，包括具体的互动和对话")
@@ -94,10 +94,10 @@ class GraphAnalysisAgent:
         return await self.global_search_async("获取故事的世界观和基本设定")
 
     async def get_character_profile_async(self, character_name: str) -> Dict[str, Any]:
-        return await self.global_search_async(f"获取{character_name}的详细信息")
+        return await self.local_search_async(f"获取{character_name}的详细信息，包括外貌、性格、行为特点和重要对话")
     
     async def get_significant_event_async(self, event_name:str) -> Dict[str, Any]:
-        return await self.global_search_async(f"获取事件{event_name}的详细信息")
+        return await self.local_search_async(f"获取事件{event_name}的详细信息，包括具体经过、参与人物和对话")
     
     async def get_main_theme_async(self) -> Dict[str, Any]:
         return await self.global_retrieve_async("分析故事的主题")

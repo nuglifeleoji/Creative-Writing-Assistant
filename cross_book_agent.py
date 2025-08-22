@@ -1,3 +1,18 @@
+"""
+Cross-Book Agent for Multi-Book Creative Writing
+================================================
+
+This module provides cross-book composition capabilities for the AI Creative Writing Assistant.
+It enables parallel retrieval from multiple books and unified generation with fused context.
+
+Key Features:
+- Parallel context retrieval from multiple books
+- Context fusion and constraint management
+- Non-intrusive operation (doesn't change global state)
+- Streaming response support
+
+"""
+
 import os
 import asyncio
 from typing import List, Dict, Any, Optional, Tuple
@@ -14,10 +29,14 @@ API_KEY = os.getenv("AZURE_OPENAI_API_KEY") or ""
 
 
 class CrossLangChainAgent:
-    """Cross-book composition helper.
-    - Does not change global currentBook
+    """
+    Cross-book composition agent for multi-book creative writing.
+    
+    This agent:
+    - Does not change global currentBook state
     - Collects contexts from multiple books in parallel
     - Prepares a single generation prompt that fuses constraints
+    - Provides unified creative writing across multiple books
     """
 
     def __init__(

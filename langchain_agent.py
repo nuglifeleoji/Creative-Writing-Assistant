@@ -1,20 +1,39 @@
+"""
+LangChain Agent for GraphRAG-based Creative Writing Assistant
+============================================================
+
+This module provides the core LangChain agent implementation for the AI Creative Writing Assistant.
+It integrates GraphRAG (Graph-based Retrieval Augmented Generation) with LangChain agents
+to provide intelligent book analysis and creative writing assistance.
+
+Key Features:
+- Multi-book support with dynamic switching
+- GraphRAG-based retrieval and generation
+- Conversation memory with summarization
+- Streaming response support
+- Tool-based agent architecture
+
+License: MIT
+"""
+
 import os
 import json
 import asyncio
 import tiktoken
 from typing import Dict, Any
 
-# 确保你已经安装了以下库
+# Required libraries
 # pip install langchain langchain-openai
 
-# 注意配置OPENAI_API_KEY以及graphrag所在路径(代码第172行)
+# Note: Configure OPENAI_API_KEY and graphrag path (line 172)
 
 from dotenv import load_dotenv
 
 load_dotenv("./.env")
 
-# 优先读取 OPENAI_API_KEY，其次 AZURE_OPENAI_API_KEY，不要把密钥当作环境变量名
-api_key =os.getenv("AZURE_OPENAI_API_KEY") or ""
+# Priority: AZURE_OPENAI_API_KEY, then OPENAI_API_KEY
+# Don't use the key name as an environment variable
+api_key = os.getenv("AZURE_OPENAI_API_KEY") or ""
 
 from langchain.agents import tool
 from langchain.agents import create_react_agent, AgentExecutor, create_tool_calling_agent
@@ -33,30 +52,46 @@ from langchain.memory import ConversationSummaryBufferMemory
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-# 1. 初始化一个用于总结的LLM
-# 可以用一个便宜、快速的模型来做总结，也可以用主模型
+# 1. Initialize LLM for conversation summarization
+# Can use a cheaper, faster model for summarization, or the main model
 llm_hist = AzureChatOpenAI(
         openai_api_version="2024-12-01-preview",
         azure_deployment="gpt-4o",
         model_name="gpt-4o",
         azure_endpoint="https://tcamp.openai.azure.com/",
         openai_api_key=api_key,
-        temperature=0.1,   # 更高创造性
-        max_tokens=2000     # 从1000增加到2000
+        temperature=0.1,   # Higher creativity
+        max_tokens=2000     # Increased from 1000
 )
 
-# 2. 创建带总结功能的Memory
-# 当token超过1000时，开始将旧消息总结
+# 2. Create memory with summarization capability
+# When token count exceeds 1000, start summarizing old messages
 memory = ConversationSummaryBufferMemory(
     llm=llm_hist,
-    max_token_limit=1500,  # 设置token限制
-    memory_key="chat_history", # 与prompt中的key对应
+    max_token_limit=1500,  # Token limit setting
+    memory_key="chat_history", # Corresponds to key in prompt
     return_messages=True,
 )
 
 
 class GraphAnalysisAgent:
+    """
+    Main agent class for GraphRAG-based book analysis and creative writing assistance.
+    
+    This agent provides:
+    - Multi-book support with dynamic switching
+    - GraphRAG-based retrieval and generation
+    - Book management operations
+    - Integration with LangChain tools and memory
+    """
+    
     def __init__(self, use_multi_book=True):
+        """
+        Initialize the GraphAnalysisAgent.
+        
+        Args:
+            use_multi_book (bool): Whether to enable multi-book support
+        """
         self.use_multi_book = use_multi_book
         if use_multi_book:
             self.rag_engine = multi_book_manager
@@ -66,29 +101,50 @@ class GraphAnalysisAgent:
             self.current_engine = rag_engine
         
     def add_book(self, book_name: str, book_folder: str):
-        """添加新书本"""
+        """
+        Add a new book to the agent.
+        
+        Args:
+            book_name (str): Name of the book
+            book_folder (str): Path to the book's data folder
+        """
         if self.use_multi_book:
             self.rag_engine.add_book(book_name, book_folder)
         else:
-            print("当前使用的是单书本引擎，请设置 use_multi_book=True 来启用多书本功能")
+            print("Currently using single book engine. Set use_multi_book=True to enable multi-book functionality")
     
     def switch_book(self, book_name: str):
-        """切换到指定书本"""
+        """
+        Switch to a specific book.
+        
+        Args:
+            book_name (str): Name of the book to switch to
+        """
         if self.use_multi_book:
             self.rag_engine.switch_book(book_name)
             self.current_engine = self.rag_engine.get_current_engine()
         else:
-            print("当前使用的是单书本引擎，请设置 use_multi_book=True 来启用多书本功能")
+            print("Currently using single book engine. Set use_multi_book=True to enable multi-book functionality")
     
     def list_books(self):
-        """列出所有可用的书本"""
+        """
+        List all available books.
+        
+        Returns:
+            list: List of available book names
+        """
         if self.use_multi_book:
             return self.rag_engine.list_books()
         else:
             return ["default_book"]
     
     def get_current_book(self):
-        """获取当前书本名称"""
+        """
+        Get the name of the currently selected book.
+        
+        Returns:
+            str: Name of the current book
+        """
         if self.use_multi_book:
             return self.rag_engine.get_current_book()
         else:
@@ -183,7 +239,7 @@ class GraphAnalysisAgent:
         return await engine.local_search_full(query)
 
     async def get_characters_async(self) -> Dict[str, Any]:
-        return await self.local_search_full_async("列出故事中的所有人物角色，包括他们的性格特点和重要描述")
+        return await self.global_search_full_async("列出故事中的所有人物角色")
 
     async def get_relationships_async(self, p1: str, p2: str) -> Dict[str, Any]:
         return await self.local_search_full_async(f"分析{p1}和{p2}之间的关系，包括具体的互动和对话")
@@ -1329,13 +1385,13 @@ async def main() -> None:
     
     # 定义要加载的书本列表
     books_to_load = [
-        ("book4", "./book4/output"),
-        ("book5", "./book5/output"), 
-        ("book6", "./book6/output"),
-        ("book2", "./rag_book2/ragtest/output"),
-        ("tencent", "./tencent/output"),
-        ("default", "./rag/output"),  # 默认的rag/output
-        ("sanguo","./sanguo/output")
+        ("ordinary_world", "./book_data/ordinary_world/output"),
+        ("three_body_problem", "./book_data/three_body_problem/output"), 
+        ("three_body_problem_2", "./book_data/three_body_problem_2/output"),
+        ("frankenstein", "./book_data/frankenstein/ragtest/output"),
+        ("dune", "./book_data/dune/output"),
+        ("suspect_x", "./book_data/suspect_x/output"),  # 默认的suspect_x/output
+        ("romance_of_three_kingdoms", "./book_data/romance_of_three_kingdoms/output")
     ]
     
     loaded_books = []

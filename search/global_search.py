@@ -52,7 +52,7 @@ model = ModelManager().get_or_create_chat_model(
 token_encoder = tiktoken.get_encoding("cl100k_base")
 
 # parquet files generated from indexing pipeline
-INPUT_DIR = "./book5/output"
+INPUT_DIR = "./book_data/three_body_problem/output"
 COMMUNITY_TABLE = "communities"
 COMMUNITY_REPORT_TABLE = "community_reports"
 ENTITY_TABLE = "entities"

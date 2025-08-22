@@ -1,3 +1,20 @@
+"""
+Text Polish Agent for Creative Writing Enhancement
+==================================================
+
+This module provides text polishing and critique capabilities for the AI Creative Writing Assistant.
+It offers lightweight text enhancement without requiring GraphRAG, using only LLM capabilities.
+
+Key Features:
+- Text polishing with customizable tone and length
+- Professional critique and improvement suggestions
+- Streaming response support
+- Context-aware enhancement using chat history
+
+Author: [Your Name]
+License: MIT
+"""
+
 import os
 from typing import Optional
 from dotenv import load_dotenv
@@ -11,9 +28,14 @@ API_KEY = os.getenv("AZURE_OPENAI_API_KEY") or ""
 
 
 class PolishAgent:
-    """A lightweight agent for polishing and critiquing text.
-    - No GraphRAG; uses only LLM with streaming enabled
+    """
+    A lightweight agent for polishing and critiquing text.
+    
+    This agent:
+    - Uses only LLM (no GraphRAG required)
+    - Supports streaming responses
     - Accepts user draft and optional chat history
+    - Provides customizable tone and length adjustments
     """
 
     def __init__(

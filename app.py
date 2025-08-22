@@ -1,3 +1,15 @@
+"""
+AI Creative Writing Assistant - Flask Application
+================================================
+
+A sophisticated web application for intelligent creative writing assistance,
+featuring real-time streaming responses, multi-book cross-reference capabilities,
+and interactive AI thinking process visualization.
+
+Author: [Your Name]
+License: MIT
+"""
+
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import asyncio
@@ -14,19 +26,26 @@ from langchain.callbacks.base import BaseCallbackHandler
 from typing import Any, Dict, List
 from langchain_core.agents import AgentAction, AgentFinish
 
+# Initialize Flask application with CORS support
 app = Flask(__name__)
-CORS(app)  # 允许跨域请求
+CORS(app)  # Enable cross-origin requests
 
-# 全局变量
+# Global agent instances
 graph_agent = None
-graph_agent_instance = None  # 保存 GraphAnalysisAgent 实例的引用
-polish_agent = None          # 独立润色 Agent
-cross_agent = None           # 跨书创作 Agent
+graph_agent_instance = None  # Reference to GraphAnalysisAgent instance
+polish_agent = None          # Independent polish agent
+cross_agent = None           # Cross-book creation agent
 
-# 线程安全的回调消息队列
+# Thread-safe callback message queue
 callback_queue = queue.Queue()
+
 class StreamingCallbackHandler(BaseCallbackHandler):
-    """只暴露过程，不泄露推理细节（不输出 action.log）。"""
+    """
+    Custom callback handler for streaming responses via Server-Sent Events (SSE).
+    
+    This handler exposes the AI thinking process without revealing internal reasoning
+    details. It implements true streaming by not deduplicating llm_token events.
+    """
     def __init__(self, yield_func):
         self.yield_func = yield_func
         self.current_tool = None
@@ -35,55 +54,67 @@ class StreamingCallbackHandler(BaseCallbackHandler):
         self._sent_events = set()  # 用于去重
 
     def _send(self, etype: str, payload: Dict[str, Any]):
-        # 对于 token 事件：不去重，直接推送，实现真流式输出
+        """
+        Send SSE event with deduplication logic.
+        
+        Args:
+            etype: Event type (e.g., 'llm_token', 'tool_start', etc.)
+            payload: Event payload data
+        """
+        # For token events: no deduplication, direct push for true streaming
         if etype == "llm_token":
             sse_message = f"event: {etype}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
             self.yield_func(sse_message)
             return
             
-        # 对于其他事件，使用事件类型+关键内容进行去重
+        # For other events: deduplicate using event type + key content
         if etype in ["run_start", "run_end"]:
-            event_key = f"{etype}"  # 这些事件每次只应该发送一次
+            event_key = f"{etype}"  # These events should only be sent once
         else:
             event_key = f"{etype}:{str(payload)[:50]}"
         
         if event_key in self._sent_events:
-            print(f"⚠️ 跳过重复事件: {etype}")
+            print(f"⚠️ Skipping duplicate event: {etype}")
             return
         
         self._sent_events.add(event_key)
         payload = {"runId": self._run_id, **payload}
-        # 按 SSE 标准写法输出：event + data + 空行
+        # Output in SSE standard format: event + data + empty line
         sse_message = f"event: {etype}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
-        print(f"🔄 回调发送SSE: {etype} -> {str(payload)[:100]}...")
+        print(f"🔄 Callback sending SSE: {etype} -> {str(payload)[:100]}...")
         self.yield_func(sse_message)
 
-    # 任务起止
+    # Chain execution events
     def on_chain_start(self, serialized: Dict[str, Any], inputs: Dict[str, Any], **kwargs: Any) -> None:
+        """Handle chain start events"""
         self._send("run_start", {
             "chain": serialized.get("name", "chain"),
             "inputsPreview": str(inputs)[:300]
         })
 
     def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> None:
+        """Handle chain end events"""
         self._send("run_end", {
             "outputsPreview": str(outputs)[:300]
         })
 
-    # Agent 决策（不输出思维文本）
+    # Agent decision events (without revealing internal reasoning)
     def on_agent_action(self, action: AgentAction, **kwargs: Any) -> Any:
+        """Handle agent action events"""
         self._send("plan", {
             "nextTool": action.tool,
             "argsPreview": str(action.tool_input)[:300]
         })
 
     def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> Any:
+        """Handle agent finish events"""
         self._send("plan_done", {
             "finalReturnPreview": str(finish.return_values)[:300]
         })
 
-    # 工具调用
+    # Tool execution events
     def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> None:
+        """Handle tool start events with timing"""
         tool_name = serialized.get("name", "unknown_tool")
         self.current_tool = tool_name
         self._tool_start_ts[tool_name] = time.time()
@@ -93,6 +124,7 @@ class StreamingCallbackHandler(BaseCallbackHandler):
         })
 
     def on_tool_end(self, output: str, **kwargs: Any) -> None:
+        """Handle tool end events with latency calculation"""
         tool = self.current_tool or 'unknown_tool'
         latency = None
         if tool in self._tool_start_ts:
@@ -104,17 +136,20 @@ class StreamingCallbackHandler(BaseCallbackHandler):
             "truncated": len(output) > 800
         })
 
-    # LLM token 流 + 用量
+    # LLM token streaming and usage tracking
     def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any) -> None:
+        """Handle LLM start events"""
         self._send("llm_start", {
             "model": serialized.get("name", "llm"),
             "promptPreview": (prompts[0][:300] if prompts else "")
         })
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
+        """Handle new token events for streaming"""
         self._send("llm_token", {"token": token})
 
     def on_llm_end(self, response, **kwargs: Any) -> None:
+        """Handle LLM end events with usage statistics"""
         usage = {}
         try:
             usage = getattr(response, "usage_metadata", None) or {}
@@ -126,7 +161,18 @@ class StreamingCallbackHandler(BaseCallbackHandler):
         self._send("llm_end", {"usage": usage})
 
 def initialize_agent():
-    """初始化LangChain代理"""
+    """
+    Initialize LangChain agents and load book data.
+    
+    This function:
+    1. Creates GraphAnalysisAgent instance with multi-book support
+    2. Automatically loads all available books from predefined paths
+    3. Initializes polish and cross-book agents
+    4. Sets up the main agent executor
+    
+    Returns:
+        bool: True if initialization successful, False otherwise
+    """
     global graph_agent, graph_agent_instance
     try:
         # 创建 GraphAnalysisAgent 实例
@@ -137,16 +183,16 @@ def initialize_agent():
         
         # 定义要加载的书本列表
         books_to_load = [
-            ("平凡的世界", "./book4/output"),
-            ("三体", "./book5/output"), 
-            ("三体2", "./book6/output"),
-            ("超新星纪元", "./cxx/output"),
-            ("白夜行", "./rag_book2/ragtest/output"),
-            ("弗兰肯斯坦", "./tencent/output"),
-            ("沙丘", "./rag/output"),
-            ("嫌疑人x的献身", "./book7/output"),
-            ("斗罗大陆4", "./book8/output"),
-            ("三国演义","./sanguo/output")
+            ("平凡的世界", "./book_data/ordinary_world/output"),
+            ("三体", "./book_data/three_body_problem/output"), 
+            ("三体2", "./book_data/three_body_problem_2/output"),
+            ("超新星纪元", "./book_data/soul_land_4/output"),
+            ("白夜行", "./book_data/frankenstein/ragtest/output"),
+            ("弗兰肯斯坦", "./book_data/dune/output"),
+            ("沙丘", "./book_data/suspect_x/output"),
+            ("嫌疑人x的献身", "./book_data/supernova_era/output"),
+            ("斗罗大陆4", "./book_data/white_night/output"),
+            ("三国演义", "./book_data/romance_of_three_kingdoms/output")
         ]
         
         loaded_books = []

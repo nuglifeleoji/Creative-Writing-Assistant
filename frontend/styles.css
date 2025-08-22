@@ -1206,3 +1206,89 @@
 @media (max-width: 900px) {
   .info-grid { grid-template-columns: 1fr; }
 }
+
+/* 润色魔法高亮样式 */
+.diff-added {
+    background-color: #d4edda;
+    color: #155724;
+    padding: 2px 4px;
+    border-radius: 3px;
+    border-left: 3px solid #28a745;
+    margin: 1px 0;
+    display: inline-block;
+    position: relative;
+}
+
+.diff-added::before {
+    content: "+";
+    color: #28a745;
+    font-weight: bold;
+    margin-right: 4px;
+}
+
+.diff-modified {
+    background-color: #fff3cd;
+    color: #856404;
+    padding: 2px 4px;
+    border-radius: 3px;
+    border-left: 3px solid #ffc107;
+    margin: 1px 0;
+    display: inline-block;
+    position: relative;
+}
+
+.diff-modified::before {
+    content: "~";
+    color: #ffc107;
+    font-weight: bold;
+    margin-right: 4px;
+}
+
+.diff-removed {
+    background-color: #f8d7da;
+    color: #721c24;
+    padding: 2px 4px;
+    border-radius: 3px;
+    border-left: 3px solid #dc3545;
+    text-decoration: line-through;
+    margin: 1px 0;
+    display: inline-block;
+    position: relative;
+}
+
+.diff-removed::before {
+    content: "-";
+    color: #dc3545;
+    font-weight: bold;
+    margin-right: 4px;
+}
+
+/* 润色魔法提示 */
+.magic-diff-hint {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.magic-diff-hint i {
+    font-size: 16px;
+}
+
+/* 润色魔法按钮增强 */
+.icon-btn.polish-active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    animation: polish-pulse 2s infinite;
+}
+
+@keyframes polish-pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}

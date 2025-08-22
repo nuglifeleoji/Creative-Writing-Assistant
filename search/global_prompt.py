@@ -49,7 +49,7 @@ model = ModelManager().get_or_create_chat_model(
 
 token_encoder = tiktoken.get_encoding("cl100k_base")
 
-INPUT_DIR = "./rag/output"
+INPUT_DIR = "./book_data/suspect_x/output"
 COMMUNITY_TABLE = "communities"
 COMMUNITY_REPORT_TABLE = "community_reports"
 ENTITY_TABLE = "entities"

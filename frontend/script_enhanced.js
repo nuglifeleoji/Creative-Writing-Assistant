@@ -120,6 +120,7 @@ function renderMessage(type, content, toolCalls = null, messageId = null) {
     messageDiv.className = `message ${type}`;
     if (messageId) {
         messageDiv.id = messageId;
+        messageDiv.setAttribute('data-message-id', messageId);
     }
     
     const avatar = document.createElement('div');
@@ -195,6 +196,101 @@ function formatMessage(content) {
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.*?)\*/g, '<em>$1</em>')
         .replace(/`(.*?)`/g, '<code>$1</code>');
+}
+
+// 带diff高亮的消息格式化
+function formatMessageWithDiff(originalText, newText) {
+    if (!newText) return '';
+    
+    // 如果原文和新文本完全相同，直接返回格式化后的文本
+    if (originalText === newText) {
+        return formatMessage(newText);
+    }
+    
+    // 简单的diff算法：按段落分割并比较
+    const originalParagraphs = originalText.split(/\n+/).filter(p => p.trim().length > 0);
+    const newParagraphs = newText.split(/\n+/).filter(p => p.trim().length > 0);
+    
+    let result = '';
+    let originalIndex = 0;
+    let newIndex = 0;
+    
+    while (newIndex < newParagraphs.length) {
+        const newParagraph = newParagraphs[newIndex];
+        
+        // 检查是否在原文中找到相似的段落
+        const similarIndex = findSimilarParagraph(newParagraph, originalParagraphs, originalIndex);
+        
+        if (similarIndex >= 0) {
+            // 找到相似段落，比较是否有修改
+            const originalParagraph = originalParagraphs[similarIndex];
+            if (originalParagraph !== newParagraph) {
+                // 段落被修改了，高亮显示
+                result += `<div class="diff-modified">${formatMessage(newParagraph)}</div>`;
+            } else {
+                // 段落没有变化
+                result += `<div>${formatMessage(newParagraph)}</div>`;
+            }
+            originalIndex = similarIndex + 1;
+        } else {
+            // 新段落，高亮显示为新增
+            result += `<div class="diff-added">${formatMessage(newParagraph)}</div>`;
+        }
+        
+        newIndex++;
+    }
+    
+    return result;
+}
+
+// 将文本分割成段落
+function splitIntoSentences(text) {
+    // 按句号、问号、感叹号分割，保留标点
+    return text.split(/([。！？\n])/).filter(s => s.trim().length > 0);
+}
+
+// 查找相似的段落（改进的相似度计算）
+function findSimilarParagraph(target, paragraphs, startIndex) {
+    for (let i = startIndex; i < paragraphs.length; i++) {
+        const paragraph = paragraphs[i];
+        const similarity = calculateParagraphSimilarity(target, paragraph);
+        if (similarity > 0.4) { // 提高相似度阈值
+            return i;
+        }
+    }
+    return -1;
+}
+
+// 计算两个段落的相似度（改进的算法）
+function calculateParagraphSimilarity(str1, str2) {
+    // 如果长度差异太大，直接返回低相似度
+    const lenDiff = Math.abs(str1.length - str2.length);
+    const maxLen = Math.max(str1.length, str2.length);
+    if (maxLen > 0 && lenDiff / maxLen > 0.5) {
+        return 0.1;
+    }
+    
+    // 计算字符级别的相似度
+    const set1 = new Set(str1.split(''));
+    const set2 = new Set(str2.split(''));
+    const intersection = new Set([...set1].filter(x => set2.has(x)));
+    const union = new Set([...set1, ...set2]);
+    
+    const charSimilarity = intersection.size / union.size;
+    
+    // 计算词级别的相似度（简单分词）
+    const words1 = str1.split(/[\s，。！？；：""''（）【】]/).filter(w => w.length > 0);
+    const words2 = str2.split(/[\s，。！？；：""''（）【】]/).filter(w => w.length > 0);
+    
+    const wordSet1 = new Set(words1);
+    const wordSet2 = new Set(words2);
+    const wordIntersection = new Set([...wordSet1].filter(w => wordSet2.has(w)));
+    const wordUnion = new Set([...wordSet1, ...wordSet2]);
+    
+    const wordSimilarity = wordUnion.size > 0 ? wordIntersection.size / wordUnion.size : 0;
+    
+    // 综合相似度
+    return (charSimilarity * 0.3 + wordSimilarity * 0.7);
 }
 
 // 添加消息到历史记录和界面
@@ -1824,7 +1920,7 @@ async function polishLastAssistantMessage() {
     }
     const triggeringUserPrompt = getPrevUserPrompt(index);
 
-    // 追加一条“润色中”的消息
+    // 追加一条"润色中"的消息
     const polishMsgId = 'polish-' + Date.now();
     const polishEl = renderMessage('assistant', '✨ 正在润色上一条回答...', null, polishMsgId);
 
@@ -2008,6 +2104,18 @@ async function polishMessageById(targetId) {
         addMessage('system', '该回复为空，无法润色');
         return;
     }
+    
+    // 为润色按钮添加激活状态 - 改进查找机制
+    const targetMessageEl = document.querySelector(`[data-message-id="${targetId}"]`) || 
+                           document.getElementById(targetId);
+    let polishBtn = null;
+    if (targetMessageEl) {
+        polishBtn = targetMessageEl.querySelector('.icon-btn[title="润色"]');
+    }
+    if (polishBtn) {
+        polishBtn.classList.add('polish-active');
+    }
+    
     const outId = 'polish-' + Date.now();
     const el = renderMessage('assistant',
         `<div class="magic-wrapper">
@@ -2015,12 +2123,26 @@ async function polishMessageById(targetId) {
                 <span class="magic-star"><i class="fas fa-star"></i></span>
                 <span class="magic-text">正在施展润色魔法，可能需要一点时间<span class="magic-dots"></span></span>
             </div>
-            <div class="magic-stream" style="display:none;"></div>
+            <div class="magic-stream" style="display:none;">
+                <div class="magic-diff-hint">
+                    <i class="fas fa-eye"></i>
+                    <span>润色高亮说明：<span class="diff-added" style="margin:0 4px;">绿色</span>为新增内容，<span class="diff-modified" style="margin:0 4px;">黄色</span>为修改内容</span>
+                </div>
+                <div class="polish-content"></div>
+            </div>
         </div>`,
         null,
         outId
     );
-    await streamPolish({ draft, userPrompt, outId });
+    
+    try {
+        await streamPolish({ draft, userPrompt, outId });
+    } finally {
+        // 移除润色按钮的激活状态
+        if (polishBtn) {
+            polishBtn.classList.remove('polish-active');
+        }
+    }
 }
 
 // 修改意见（点评）按钮：针对某条回复输出详细改进建议
@@ -2061,7 +2183,7 @@ async function streamPolish({ draft, userPrompt = '', outId }) {
         targetLength: 'original',
         stream: true
     };
-    await sseToMessage({ url: '/api/polish', payload, outId });
+    await sseToMessage({ url: '/api/polish', payload, outId, originalText: draft });
 }
 
 // 封装：以SSE流式调用 /api/critique
@@ -2076,7 +2198,7 @@ async function streamCritique({ text, userPrompt = '', outId }) {
 }
 
 // 通用SSE到消息渲染
-async function sseToMessage({ url, payload, outId }) {
+async function sseToMessage({ url, payload, outId, originalText = null }) {
     try {
         const res = await fetch(url, {
             method: 'POST',
@@ -2095,12 +2217,14 @@ async function sseToMessage({ url, payload, outId }) {
         const wrapper = document.getElementById(outId)?.querySelector('.message-text');
         let streamDiv = null;
         let loadingDiv = null;
+        let polishContentDiv = null;
         if (wrapper) {
             // 使用占位结构：magic-wrapper > magic-loading + magic-stream
             const w = wrapper.querySelector('.magic-wrapper');
             if (w) {
                 loadingDiv = w.querySelector('.magic-loading');
                 streamDiv = w.querySelector('.magic-stream');
+                polishContentDiv = w.querySelector('.polish-content');
             }
         }
         while (true) {
@@ -2127,10 +2251,21 @@ async function sseToMessage({ url, payload, outId }) {
                                         loadingDiv.style.display = 'none';
                                         streamDiv.style.display = 'block';
                                     }
-                                    if (streamDiv) {
-                                        streamDiv.innerHTML = formatMessage(streamingText);
-                                        elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+                                    // 如果是润色功能且有原文，显示diff高亮
+                                    if (originalText && url === '/api/polish') {
+                                        if (polishContentDiv) {
+                                            polishContentDiv.innerHTML = formatMessageWithDiff(originalText, streamingText);
+                                        } else if (streamDiv) {
+                                            streamDiv.innerHTML = formatMessageWithDiff(originalText, streamingText);
+                                        }
+                                    } else {
+                                        if (polishContentDiv) {
+                                            polishContentDiv.innerHTML = formatMessage(streamingText);
+                                        } else if (streamDiv) {
+                                            streamDiv.innerHTML = formatMessage(streamingText);
+                                        }
                                     }
+                                    elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
                                 }
                             }
                         } catch {}
@@ -2142,7 +2277,20 @@ async function sseToMessage({ url, payload, outId }) {
                                 if (loadingDiv) loadingDiv.style.display = 'none';
                                 if (streamDiv) {
                                     streamDiv.style.display = 'block';
-                                    streamDiv.innerHTML = formatMessage(finalText);
+                                    // 如果是润色功能且有原文，显示diff高亮
+                                    if (originalText && url === '/api/polish') {
+                                        if (polishContentDiv) {
+                                            polishContentDiv.innerHTML = formatMessageWithDiff(originalText, finalText);
+                                        } else {
+                                            streamDiv.innerHTML = formatMessageWithDiff(originalText, finalText);
+                                        }
+                                    } else {
+                                        if (polishContentDiv) {
+                                            polishContentDiv.innerHTML = formatMessage(finalText);
+                                        } else {
+                                            streamDiv.innerHTML = formatMessage(finalText);
+                                        }
+                                    }
                                 } else {
                                     wrapper.innerHTML = formatMessage(finalText);
                                 }

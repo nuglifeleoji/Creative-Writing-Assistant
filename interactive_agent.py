@@ -185,7 +185,7 @@ class GraphAnalysisAgent:
         return await engine.local_search_full(query)
 
     async def get_characters_async(self) -> Dict[str, Any]:
-        return await self.local_search_full_async("列出故事中的所有人物角色，包括他们的性格特点和重要描述")
+        return await self.global_search_full_async("列出故事中的所有人物角色")
 
     async def get_relationships_async(self, p1: str, p2: str) -> Dict[str, Any]:
         return await self.local_search_full_async(f"分析{p1}和{p2}之间的关系，包括具体的互动和对话")
@@ -867,12 +867,12 @@ async def main() -> None:
     
     # 定义要加载的书本列表
     books_to_load = [
-        ("book4", "./book4/output"),
-        ("book5", "./book5/output"), 
-        ("book6", "./book6/output"),
-        ("book2", "./rag_book2/output"),
-        ("tencent", "./tencent/output"),
-        ("default", "./rag/output")  # 默认的rag/output
+                ("ordinary_world", "./book_data/ordinary_world/output"),
+        ("three_body_problem", "./book_data/three_body_problem/output"),
+        ("three_body_problem_2", "./book_data/three_body_problem_2/output"),
+        ("frankenstein", "./book_data/frankenstein/ragtest/output"),
+        ("dune", "./book_data/dune/output"),
+        ("suspect_x", "./book_data/suspect_x/output")  # 默认的suspect_x/output
     ]
     
     loaded_books = []

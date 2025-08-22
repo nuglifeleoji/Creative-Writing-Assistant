@@ -32,7 +32,7 @@ load_dotenv()
 class RAGEngine:
     """GraphRAG引擎，将检索和LLM调用分离，支持多书本"""
     
-    def __init__(self, input_dir: str = "./rag/output"):
+    def __init__(self, input_dir: str = "./book_data/suspect_x/output"):
         """
         初始化RAG引擎
         
@@ -567,6 +567,21 @@ class RAGEngine:
                 query=query,
                 **self.local_context_params
             )
+        except Exception as e:
+            if "Query vector size" in str(e) and "does not match index column size" in str(e):
+                print(f"⚠️ [RAG检索] 向量维度不匹配，使用备用检索方式: {e}")
+                # 使用备用检索：仅基于文本单元，不使用向量检索
+                backup_params = self.local_context_params.copy()
+                backup_params["top_k_mapped_entities"] = 0  # 跳过实体向量检索
+                
+                context = self.local_context_builder.build_context(
+                    query=query,
+                    **backup_params
+                )
+            else:
+                raise e
+        
+        try:
             
             # 处理context对象，获取原始文本
             if hasattr(context, 'context_text'):
@@ -797,7 +812,7 @@ class RAGEngine:
             }
 
 
-# 全局实例 - 默认使用 ./rag/output
+# 全局实例 - 默认使用 ./book_data/suspect_x/output
 rag_engine = RAGEngine()
 
 # 多书本管理器

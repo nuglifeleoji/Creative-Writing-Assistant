@@ -181,7 +181,7 @@ class GraphAnalysisAgent:
         return await engine.local_search_full(query)
 
     async def get_characters_async(self) -> Dict[str, Any]:
-        return await self.local_search_full_async("列出故事中的所有人物角色，包括他们的性格特点和重要描述")
+        return await self.global_search_full_async("列出故事中的所有人物角色")
 
     async def get_relationships_async(self, p1: str, p2: str) -> Dict[str, Any]:
         return await self.local_search_full_async(f"分析{p1}和{p2}之间的关系，包括具体的互动和对话")
@@ -1703,7 +1703,7 @@ async def main():
     graph_agent = GraphAnalysisAgent(use_multi_book=True)
     
     # 2. 增强知识库加载逻辑
-    book_path = "./rag/output"
+    book_path = "./book_data/suspect_x/output"
     if os.path.exists(book_path):
         print(f"📚 找到知识库路径: {book_path}")
         

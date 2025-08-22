@@ -20,7 +20,7 @@ from graphrag.vector_stores.lancedb import LanceDBVectorStore
 
 import asyncio
 
-INPUT_DIR = "./rag/output"
+INPUT_DIR = "./book_data/suspect_x/output"
 LANCEDB_URI = f"{INPUT_DIR}/lancedb"
 
 COMMUNITY_REPORT_TABLE = "community_reports"

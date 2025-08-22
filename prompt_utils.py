@@ -11,10 +11,13 @@ def build_guidelines() -> str:
   - 适配：主题/背景/全局综合类问题；需要跨章节聚合与长距离依赖。
   - 输入建议：{query, summarize=true, top_k<=5, diversify=true}
   - 输出关注：主题脉络、关键事件时间线、互证的多点摘要。
-- **get_characters / get_character_profile（人物清单与画像）**
-  - 适配：人物列表、人物卡、关系图谱、弧线（arc）抽取与对齐。
-  - 使用：**local_search**（角色信息通常在文本中有具体描述和对话）
-  - 输入建议：{name?=None, need_relations=true, need_arc=true, viewpoint="author/narrator"}
+- **get_characters（人物清单）**
+  - 适配：获取故事中所有人物角色的列表
+  - 使用：**global_search**（需要跨章节汇总所有角色）
+- **get_character_profile（人物画像）**
+  - 适配：具体角色的详细信息、性格、外貌、行为特点
+  - 使用：**local_search**（角色细节通常在文本中有具体描述和对话）
+  - 输入建议：{name, need_relations=true, need_arc=true, viewpoint="author/narrator"}
 - **get_important_locations（地点清单）**
   - 适配：地名、功能、登场频率、与人物/事件的绑定。
   - 输入建议：{top_k=20, attach_scenes=true}
@@ -26,11 +29,18 @@ def build_guidelines() -> str:
 - **get_causal_chains（因果链）**
 
 > 选择矩阵：
-- 精确事实、角色分析、人物关系 → local_search
-- 跨章脉络、主题分析、全局概述 → global_search
-- 人物列表与画像 → local_search（get_characters 等工具）
-- 地点清单 → get_important_locations
-- 背景设定与世界观 → background_knowledge
+- **Global Search 使用场景**：
+  - 人物列表汇总（get_characters）
+  - 主题分析、全局概述
+  - 地点列表、背景设定
+  - 跨章节的宏观脉络
+  - 悬念伏笔、全局冲突
+- **Local Search 使用场景**：
+  - 具体角色详情（get_character_profile）
+  - 人物关系分析、角色对话
+  - 具体事件详情
+  - 因果链分析
+  - 文本一致性检查
 - 若不确定：先 `global_search` 出纲（主题与主线），再用 `local_search` 打点验证
 
 ---

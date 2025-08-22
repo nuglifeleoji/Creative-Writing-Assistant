@@ -2,8 +2,9 @@ import pandas as pd
 import json
 from typing import List, Dict, Any
 from openai import OpenAI
+import os
 client = OpenAI(
-    api_key="sk-crrrxsgwputbfxhvilcgzafqyrkzevfmcmocyupkbpcivnrh",
+    api_key=os.getenv("OPENAI_API_KEY") or "",
     base_url="https://api.siliconflow.cn/v1",
     timeout=60.0  
 )

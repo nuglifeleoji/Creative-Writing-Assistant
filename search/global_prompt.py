@@ -19,7 +19,7 @@ from graphrag.query.structured_search.global_search.community_context import (
 # -----------------------------------------------------------------------------
 # 你的 LLM 和資料來源配置
 # -----------------------------------------------------------------------------
-api_key = "cegVziITiNPb7wEZVLSB1GBXr3okwWwreE2h5ijICRTNjMLMGhmkJQQJ99BHACHYHv6XJ3w3AAABACOG3fBh"
+api_key = os.getenv("AZURE_OPENAI_API_KEY") or ""
 llm_model = "gpt-4o"
 azure_api_base = "https://tcamp.openai.azure.com/"
 azure_api_version = "2025-01-01-preview"

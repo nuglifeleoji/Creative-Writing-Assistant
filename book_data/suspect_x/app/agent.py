@@ -23,7 +23,7 @@ from graphrag.query.structured_search.local_search.mixed_context import (
 from graphrag.query.structured_search.local_search.search import LocalSearch
 import asyncio
 
-api_key = "cegVziITiNPb7wEZVLSB1GBXr3okwWwreE2h5ijICRTNjMLMGhmkJQQJ99BHACHYHv6XJ3w3AAABACOG3fBh"
+api_key = os.getenv("AZURE_OPENAI_API_KEY") or ""
 llm_model = "gpt-4o"
 
 config = LanguageModelConfig(
@@ -31,7 +31,7 @@ config = LanguageModelConfig(
     api_base="https://tcamp.openai.azure.com/",
     api_version="2025-01-01-preview",
     auth_type="api_key",
-    api_key="cegVziITiNPb7wEZVLSB1GBXr3okwWwreE2h5ijICRTNjMLMGhmkJQQJ99BHACHYHv6XJ3w3AAABACOG3fBh",
+    api_key=api_key,
     model="gpt-4o",
     deployment_name="gpt-4o",
     model_supports_json=True,

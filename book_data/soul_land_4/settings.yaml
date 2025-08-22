@@ -10,7 +10,7 @@ models:
     api_base: https://tcamp.openai.azure.com/
     api_version: "2024-12-01-preview"
     auth_type: api_key # or azure_managed_identity
-    api_key: cegVziITiNPb7wEZVLSB1GBXr3okwWwreE2h5ijICRTNjMLMGhmkJQQJ99BHACHYHv6XJ3w3AAABACOG3fBh # set this in the generated .env file
+    api_key: ${AZURE_OPENAI_API_KEY} # set this in the generated .env file
     # audience: "https://cognitiveservices.azure.com/.default"
     # organization: <organization_id>
     model: gpt-4o-mini
@@ -28,7 +28,7 @@ models:
     api_base: https://tcamp.openai.azure.com
     api_version: "2023-05-15"
     auth_type: api_key # or azure_managed_identity
-    api_key: cegVziITiNPb7wEZVLSB1GBXr3okwWwreE2h5ijICRTNjMLMGhmkJQQJ99BHACHYHv6XJ3w3AAABACOG3fBh
+    api_key: ${AZURE_OPENAI_API_KEY}
     # audience: "https://cognitiveservices.azure.com/.default"
     # organization: <organization_id>
     model: text-embedding-ada-002

@@ -41,3 +41,19 @@ logs/
 data/
 datasets/
 
+# Environment variables and secrets
+.env
+.env.local
+.env.production
+.env.staging
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Cache and temporary files
+cache/
+temp/
+tmp/
+*.cache
+
